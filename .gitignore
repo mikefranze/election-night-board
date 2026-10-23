@@ -1,0 +1,15 @@
+# Third-party source datasets (~50 MB against ~1 MB for the rest of the project).
+# All re-fetchable: run `node scripts/fetch_sources.mjs` after cloning.
+data/raw_civicapi/
+data/raw_county_senate/
+data/raw_medsl/
+data/raw_pres2024/
+
+# build/data.json and build/warnings.txt ARE committed on purpose, so a clone
+# can rebuild index.html without re-downloading 50 MB of sources first.
+build/.poll.tmp.csv
+
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,2327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Election Night Board</title>
+<style>
+/* ---- tokens: dark is the default (election night); light is available ---- */
+:root {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --plane: #0d0d0d;
+  --surface-2: #211f1f;
+  --ink-1: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --dem: #3987e5;
+  --rep: #e66767;
+  --ind: #008300;
+  --neutral: #383835;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  /* diverging arms: magnitude brightens on a dark surface */
+  --d4: #104281; --d3: #1c5cab; --d2: #2a78d6; --d1: #6da7ec;
+  --r4: #8f2f2f; --r3: #b84444; --r2: #e66767; --r1: #f0a0a0;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-1: #fcfcfb; --plane: #f9f9f7; --surface-2: #f2f1ee;
+  --ink-1: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --dem: #2a78d6; --rep: #e34948; --ind: #008300; --neutral: #f0efec;
+  --d4: #cde2fb; --d3: #9ec5f4; --d2: #3987e5; --d1: #1c5cab;
+  --r4: #f7d4d4; --r3: #ef9c9c; --r2: #e34948; --r1: #a32626;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--plane); }
+body {
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink-1);
+  padding: 0 16px 64px;
+}
+.wrap { max-width: 1480px; margin: 0 auto; }
+h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 14px; margin: 0 0 2px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.sub { color: var(--ink-muted); font-size: 12px; }
+/* Stays in the sticky header so it is visible however the page is entered —
+   a stranger landing on a public URL should not have to scroll to learn that
+   these are not called races. */
+/* Its own full-width row: inside the left block its max-width pushed the
+   controls wide enough to wrap a button onto a second line. */
+.provenance { margin-top: 6px; }
+.provenance a { color: var(--ink-2); }
+a { color: var(--dem); }
+
+/* ---- header ---- */
+header {
+  position: sticky; top: 0; z-index: 20; background: var(--plane);
+  border-bottom: 1px solid var(--border); padding: 12px 0 10px; margin-bottom: 16px;
+}
+/* On a phone the controls wrap onto several rows and a sticky header costs
+   about a quarter of the screen, so let it scroll away there. */
+@media (max-width: 760px) { header { position: static; } }
+.hrow { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: baseline; }
+.hrow .spacer { flex: 1 1 auto; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; vertical-align: 1px; }
+.live .dot { background: var(--good); }
+.stale .dot { background: var(--warning); }
+.err .dot { background: var(--critical); }
+button, select, input {
+  font: inherit; color: var(--ink-1); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--ink-muted); }
+button[aria-pressed="true"] { background: var(--dem); border-color: var(--dem); color: #fff; }
+
+/* ---- panels ---- */
+section { margin-bottom: 22px; }
+.panel {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 16px;
+}
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.tile .label { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); }
+.tile .val { font-size: 27px; line-height: 1.15; margin-top: 4px; }
+.tile .note { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+.seatbar { display: flex; height: 7px; gap: 2px; margin-top: 9px; }
+.seatbar span { border-radius: 2px; }
+
+/* ---- tables ---- */
+.scroll { overflow-x: auto; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 9px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+th {
+  /* --stick is measured from the real page-header height at runtime, so the
+     column header pins just below it instead of sliding underneath. */
+  position: sticky; top: var(--stick, 70px); background: var(--surface-1); z-index: 5;
+  font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--ink-muted); font-weight: 600; cursor: pointer; user-select: none;
+}
+th:hover { color: var(--ink-1); }
+th[aria-sort] { color: var(--ink-1); }
+td.l, th.l { text-align: left; }
+tbody tr:hover td { background: var(--surface-2); }
+.muted { color: var(--ink-muted); }
+.pill { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); }
+.pill.called { border-color: var(--good); color: var(--good); }
+.swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: 0; }
+.bar { height: 5px; border-radius: 3px; background: var(--grid); position: relative; min-width: 56px; }
+.bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; display: block; }
+.cell-margin { font-weight: 600; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); align-items: center; }
+.legend b { font-weight: 600; color: var(--ink-1); }
+
+/* ---- charts ---- */
+svg { display: block; width: 100%; overflow: visible; }
+svg text { fill: var(--ink-muted); font-size: 10.5px; }
+svg .axisline { stroke: var(--axis); stroke-width: 1; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .zero { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+svg .mark { stroke: var(--surface-1); stroke-width: 2; }
+svg .lbl { fill: var(--ink-2); font-size: 11px; }
+.tip {
+  position: fixed; z-index: 60; pointer-events: none; opacity: 0;
+  transition: opacity .09s; background: var(--surface-2); color: var(--ink-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px;
+  font-size: 12px; max-width: 290px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+}
+.tip b { display: block; margin-bottom: 2px; }
+.tip .tr { display: flex; justify-content: space-between; gap: 14px; }
+.hitrow { fill: transparent; }
+.hitrow:hover { fill: var(--surface-2); }
+
+/* ---- misc ---- */
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; }
+.grid2 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; }
+@media (max-width: 1040px) { .grid2 { grid-template-columns: 1fr; } }
+textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas, monospace;
+  background: var(--surface-2); color: var(--ink-1); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+.warnbox { border-left: 3px solid var(--warning); padding: 8px 12px; background: var(--surface-2);
+  border-radius: 0 8px 8px 0; font-size: 12.5px; color: var(--ink-2); }
+.sronly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---- tabs ---- */
+.tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--border); padding-bottom: 0;
+}
+.tabs button {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  border-radius: 7px 7px 0 0; padding: 8px 15px; color: var(--ink-2);
+  font-weight: 600; font-size: 13.5px; letter-spacing: 0.01em;
+}
+.tabs button:hover { color: var(--ink-1); background: var(--surface-2); }
+.tabs button[aria-selected="true"] {
+  color: var(--ink-1); border-bottom-color: var(--dem); background: none;
+}
+.tabs button .badge {
+  display: inline-block; margin-left: 7px; padding: 0 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-muted);
+  font-size: 11px; font-weight: 600; vertical-align: 1px;
+}
+
+/* ---- state multi-select ---- */
+.dd { position: relative; }
+.ddpanel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 266px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px; box-shadow: 0 14px 40px rgba(0,0,0,.5);
+}
+.ddrow { display: flex; gap: 6px; margin-bottom: 8px; }
+.ddrow button { flex: 1; padding: 4px 6px; font-size: 12px; }
+#statelist { max-height: 272px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1px 8px; }
+#statelist label {
+  display: flex; align-items: center; gap: 6px; font-size: 12.5px;
+  padding: 2px 4px; border-radius: 5px; cursor: pointer; white-space: nowrap;
+}
+#statelist label:hover { background: var(--surface-2); }
+#statelist input { margin: 0; accent-color: var(--dem); }
+#statelist label.off { color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="hrow">
+    <div>
+      <h1>Election Night Board <span class="sub" id="eday"></span></h1>
+      <div class="sub" id="statusline"><span class="live"><span class="dot"></span></span> initialising…</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub">Refresh
+      <select id="interval">
+        <option value="0">paused</option>
+        <option value="30000" selected>30s</option>
+        <option value="60000">60s</option>
+        <option value="300000">5m</option>
+      </select>
+    </label>
+    <button id="refresh">Refresh now</button>
+    <button id="demo" aria-pressed="false" title="Fill the board with synthetic results to review the layout">Demo data</button>
+    <button id="theme" title="Toggle light / dark">◐</button>
+  </div>
+  <div class="sub provenance">
+    Personal dashboard — results via <a href="https://civicapi.org" target="_blank" rel="noopener">civicAPI</a>,
+    projections my own. Not a news organisation and not a race-calling operation.
+  </div>
+</header>
+
+<div id="demobanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--warning)" hidden>
+  <b>Demo data is on.</b> Every result and polling average below is synthetic — generated in the browser
+  to let you review the layout. Nothing here is a real vote count or a real poll. Click
+  <b>Demo data</b> again to return to the live feed.
+</div>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button role="tab" data-tab="summary" aria-selected="true">Summary</button>
+  <button role="tab" data-tab="senate"  aria-selected="false">Senate<span class="badge"></span></button>
+  <button role="tab" data-tab="house"   aria-selected="false">House<span class="badge"></span></button>
+  <button role="tab" data-tab="gov"     aria-selected="false">Governor<span class="badge"></span></button>
+</nav>
+
+<div data-panel="summary">
+<!-- ===== headline tiles ===== -->
+<section class="tiles" id="tiles"></section>
+
+<!-- ===== systemic polling error ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:10px">
+    <div>
+      <h2>Systemic polling error</h2>
+      <div class="sub">Result margin minus polling average, in points. Positive = the result ran more Republican than the polls.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub">Min. reporting
+      <select id="threshold">
+        <option value="0">0%</option><option value="50">50%</option>
+        <option value="75">75%</option><option value="90" selected>90%</option>
+        <option value="95">95%</option>
+      </select>
+    </label>
+  </div>
+  <div id="errorzone"></div>
+</section>
+
+<!-- ===== diagnostics ===== -->
+<section class="panel">
+  <h2>Feed coverage &amp; manual overrides</h2>
+  <div class="sub">Live results come from civicAPI. State election-night feeds (Clarity/Scytl) block cross-origin
+    requests, so a static page cannot read them directly — use the override box for any race the feed has not filled.</div>
+  <div id="coverage" style="margin-top:10px"></div>
+  <details>
+    <summary>Manual override — paste <code>race_key, margin_r_minus_d, percent_reporting</code> per line</summary>
+    <p class="sub" style="margin:8px 0 6px">
+      Example: <code>senate/GA, -1.4, 88</code> marks Georgia as D+1.4 with 88% in.
+      Overrides win over the feed and are tagged in the table. They live in this browser only.</p>
+    <textarea id="overrides" placeholder="senate/GA, -1.4, 88"></textarea>
+    <div style="margin-top:8px"><button id="applyover">Apply overrides</button>
+      <button id="clearover">Clear</button></div>
+  </details>
+  <details>
+    <summary>Data sources &amp; known gaps</summary>
+    <div id="sources" class="sub" style="margin-top:8px"></div>
+  </details>
+</section>
+</div>
+
+<div data-panel="senate" hidden>
+<!-- ===== senate chart ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:6px">
+    <div>
+      <h2>Senate map <span class="sub" id="chartcount"></span></h2>
+      <div class="sub" id="chartsub"></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="legend" id="chartlegend"></div>
+  </div>
+  <div id="senatechart"></div>
+</section>
+
+<!-- ===== senate ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>Senate <span class="sub" id="sencount"></span></h2>
+      <div class="sub">Click a row to load its county-level swing. Swings are signed toward the Republican candidate.</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--dem)"></span><b>D</b></span>
+      <span><span class="swatch" style="background:var(--rep)"></span><b>R</b></span>
+      <span><span class="swatch" style="background:var(--ind)"></span><b>Ind.</b></span>
+    </div>
+  </div>
+  <div class="scroll"><table id="sentable"><thead></thead><tbody></tbody></table></div>
+</section>
+
+
+
+<!-- ===== county scatter ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>County swing vs lean <span class="sub" id="scattercount"></span></h2>
+      <div class="sub">Every reporting county across all Senate races. Vertical axis is the county's 2024
+        presidential margin; horizontal axis is how far it has moved since. Dot size is 2024 turnout.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub">Compare to
+      <select id="scatterbase">
+        <option value="pres2024" selected>2024 President</option>
+        <option value="senate2020">Previous Senate</option>
+      </select>
+    </label>
+    <div class="dd">
+      <button id="statebtn" aria-expanded="false">All states ▾</button>
+      <div id="statepanel" class="ddpanel" hidden>
+        <div class="ddrow">
+          <button data-pick="all">All</button>
+          <button data-pick="none">None</button>
+          <button data-pick="comp" title="Within 10 points on the 2024 presidential margin">Competitive</button>
+        </div>
+        <div id="statelist"></div>
+      </div>
+    </div>
+    <label class="sub">Min. counted
+      <select id="scattermin">
+        <option value="0">0%</option><option value="25">25%</option>
+        <option value="50" selected>50%</option><option value="80">80%</option>
+        <option value="95">95%</option>
+      </select>
+    </label>
+    <button id="loadcounties">Load all counties</button>
+  </div>
+  <div id="scatterzone"></div>
+</section>
+</div>
+
+<div data-panel="house" hidden>
+<!-- ===== house ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>House watchlist <span class="sub" id="housecount"></span></h2>
+      <div class="sub">Districts within 10 points on the 2024 presidential or 2024 House margin. Selected from the data, not hand-picked.</div>
+    </div>
+  </div>
+  <div class="scroll" style="max-height:520px; overflow-y:auto">
+    <table id="housetable"><thead></thead><tbody></tbody></table>
+  </div>
+</section>
+</div>
+
+<div data-panel="gov" hidden>
+<!-- ===== governors ===== -->
+<section class="panel" id="govpanel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>Governors <span class="sub" id="govcount"></span></h2>
+      <div class="sub">Populated from the feed as races are published. Compared against Trump 2024 only —
+        no statewide gubernatorial-history dataset was available to build a last-race baseline.</div>
+    </div>
+  </div>
+  <div class="scroll"><table id="govtable"><thead></thead><tbody></tbody></table></div>
+  <div id="govempty"></div>
+</section>
+</div>
+
+<!-- ===== county detail ===== -->
+<section class="panel" id="countypanel" hidden>
+  <div class="grid2">
+    <div>
+      <h2 id="countytitle">County swing vs 2024</h2>
+      <div class="sub" id="countysub"></div>
+      <div id="countychart" style="margin-top:10px"></div>
+    </div>
+    <div>
+      <h2>Swing-implied statewide margin</h2>
+      <div class="sub">Counties reporting, weighted by their 2024 turnout. More stable than the raw statewide partial early in the night.</div>
+      <div id="countystats" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div class="scroll" style="margin-top:12px; max-height:320px; overflow-y:auto">
+    <table id="countytable"><thead></thead><tbody></tbody></table>
+  </div>
+</section>
+
+
+
+
+
+
+
+
+
+
+
+
+<footer class="sub" style="margin-top:18px">
+  Live results via <a href="https://civicapi.org" target="_blank" rel="noopener">civicAPI</a>.
+  Historical baselines: MIT Election Data + Science Lab; The Downballot; tonmcg county returns.
+  <span id="builtat"></span>
+</footer>
+
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+/* ============================================================
+   Embedded static data (baselines + race index + your polling
+   averages). Regenerate with:  node scripts/build_data.mjs
+                                node scripts/bundle.mjs
+   ============================================================ */
+const DATA = __DATA_JSON__;
+
+/* ---------------- config ---------------- */
+const API = 'https://civicapi.org/api/v2';
+const OVERRIDE_KEY = 'electionboard.overrides.v1';
+const MAJOR = { Democratic: 'D', Republican: 'R' };
+
+/* ---------------- tiny helpers ---------------- */
+const $ = (s, r = document) => r.querySelector(s);
+const el = (t, props = {}, kids = []) => {
+  const n = document.createElement(t);
+  for (const [k, v] of Object.entries(props)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'html') n.innerHTML = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of [].concat(kids)) if (c) n.append(c);
+  return n;
+};
+const fmt = (v, d = 1) => v === null || v === undefined || !Number.isFinite(v) ? '—'
+  : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(d);
+/** Margins are stored R-positive; show them the way results are read aloud. */
+const marginLabel = (v, d = 1) => {
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) < 0.05) return 'EVEN';
+  return (v > 0 ? 'R+' : 'D+') + Math.abs(v).toFixed(d);
+};
+const partyOf = (p) => MAJOR[p] ?? (/^(Independent|Nonpartisan|Undeclared|Unaffiliated)/i.test(p || '') ? 'I' : '3');
+const partyColor = (p) => p === 'D' ? 'var(--dem)' : p === 'R' ? 'var(--rep)'
+  : p === 'I' ? 'var(--ind)' : 'var(--ink-muted)';
+/** Diverging scale for a margin, used for cell tint and chart marks. */
+const marginColor = (v) => {
+  if (!Number.isFinite(v)) return 'var(--neutral)';
+  const a = Math.abs(v), s = v > 0 ? 'r' : 'd';
+  const step = a < 1 ? 1 : a < 5 ? 2 : a < 15 ? 3 : 4;
+  return `var(--${s}${5 - step})`;
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------------- state ---------------- */
+const state = {
+  live: new Map(),        // raceKey -> {margin, reporting, candidates, called, winnerParty, source}
+  counties: null,         // {raceKey, rows:[...]}
+  overrides: new Map(),
+  // Closest races first: the useful default on election night, and stable before
+  // any votes exist (sorting by poll error would leave every row tied at null).
+  sort: { sentable: { key: 'competitiveness', dir: 1 }, housetable: { key: 'competitiveness', dir: 1 } },
+  selected: null,
+  lastFetch: null,
+  lastError: null,
+  fetching: false,
+  demo: false,
+  realPolling: null,
+  projection: null,
+  allCounties: null,
+  countiesLoadedAt: null,
+  countiesLoading: false,
+  countiesFailed: 0,
+  tab: null,
+  ready: false,
+  scatterStates: null,
+  filterBuiltFor: null,
+};
+
+/* ============================================================
+   Margin computation from a civicAPI race record
+   ============================================================ */
+/**
+ * civicAPI candidate metadata carries occasional errors (duplicate entries,
+ * wrong names), so the margin is taken from the top two vote-getters by votes
+ * rather than by trusting a "major_candidate" flag, and party comes from the
+ * party string. Races where an independent is the real opponent (NE, MT) work
+ * without special-casing.
+ */
+function marginFromRace(race) {
+  const cands = (race.candidates || [])
+    .filter(c => !/write-?in/i.test(c.party || ''))
+    .map(c => ({ name: c.name, party: partyOf(c.party), rawParty: c.party, votes: +c.votes || 0, pct: +c.percent || 0, winner: !!c.winner }))
+    .sort((a, b) => b.votes - a.votes);
+  const total = cands.reduce((s, c) => s + c.votes, 0);
+  const [w, l] = cands;
+  let margin = null;
+  if (w && l && (w.votes + l.votes) > 0) {
+    const spread = ((w.votes - l.votes) / (w.votes + l.votes)) * 100;
+    margin = w.party === 'R' ? spread : w.party === 'D' ? -spread
+           : l.party === 'R' ? -spread : spread;
+  }
+  const called = cands.find(c => c.winner) || null;
+  return {
+    margin, total, candidates: cands,
+    // Sum of the top two only. The projection works in two-candidate vote space,
+    // and deriving each side's votes from (twoSum, margin) keeps it consistent
+    // for D-vs-R, R-vs-independent (NE, MT) and every other configuration.
+    twoSum: ((w && w.votes) || 0) + ((l && l.votes) || 0),
+    reporting: +race.percent_reporting || 0,
+    called: !!called, calledFor: called ? called.party : null,
+    lastUpdated: race.last_updated || null,
+  };
+}
+
+/* ============================================================
+   Fetching
+   ============================================================ */
+async function getJSON(url) {
+  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+  return r.json();
+}
+
+/** One search sweep returns every Senate general with votes — far lighter than 35 race calls. */
+async function fetchSenate() {
+  const seen = new Map();
+  for (let offset = 0; offset < 600; offset += 200) {
+    const j = await getJSON(`${API}/race/search?country=US&type=US%20Senate&election_type=General&limit=200&offset=${offset}`);
+    const races = j.races || [];
+    for (const r of races) {
+      if (!String(r.election_date || '').startsWith('2026')) continue;
+      if (r.province === 'US') { seen.set('national', r); continue; }
+      seen.set(`senate/${r.province}`, r);
+    }
+    if (races.length < 200) break;
+  }
+  return seen;
+}
+
+/** House generals were still largely unpopulated upstream; sweep defensively. */
+async function fetchHouse() {
+  const seen = new Map();
+  for (let offset = 0; offset < 1000; offset += 200) {
+    const j = await getJSON(`${API}/race/search?country=US&type=US%20House&election_type=General&limit=200&offset=${offset}`);
+    const races = j.races || [];
+    for (const r of races) {
+      if (!String(r.election_date || '').startsWith('2026')) continue;
+      if (r.district) seen.set(`house/${r.district}`, r);
+    }
+    if (races.length < 200) break;
+  }
+  return seen;
+}
+
+/**
+ * Governor races are read straight from the feed rather than from a baked-in
+ * list: upstream published none for 2026 at build time, so there was nothing
+ * to enumerate. Any state race that appears here is picked up automatically
+ * and joined to its 2024 presidential baseline.
+ */
+async function fetchGovernor() {
+  const seen = new Map();
+  for (let offset = 0; offset < 800; offset += 200) {
+    // NOT election_type=General. Governor contests are published as "Statewide"
+    // while Senate generals are "General", and filtering on General alone hid
+    // all 36 of them. Primaries and runoffs are excluded by name instead.
+    const j = await getJSON(`${API}/race/search?country=US&type=Governor&limit=200&offset=${offset}`);
+    const races = j.races || [];
+    for (const r of races) {
+      if (!String(r.election_date || '').startsWith('2026')) continue;
+      if (!r.province || r.province === 'US') continue;
+      if (!/^(Statewide|General)$/i.test(r.election_type || '')) continue;
+      seen.set(`gov/${r.province}`, r);
+    }
+    if (races.length < 200) break;
+  }
+  return seen;
+}
+
+async function refresh() {
+  if (state.fetching) return;
+  state.fetching = true;
+  setStatus('fetching', 'fetching…');
+  try {
+    const [sen, house, gov] = await Promise.all([
+      fetchSenate(),
+      fetchHouse().catch(() => new Map()),
+      fetchGovernor().catch(() => new Map()),
+    ]);
+    state.live.clear();
+    for (const [k, race] of [...sen, ...house, ...gov]) {
+      state.live.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
+    }
+    state.lastFetch = new Date();
+    state.lastError = null;
+  } catch (e) {
+    state.lastError = e.message || String(e);
+  } finally {
+    state.fetching = false;
+  }
+  renderAll();
+  if (state.selected) loadCounties(state.selected).catch(() => {});
+}
+
+/* ============================================================
+   Merge of live feed + manual overrides
+   ============================================================ */
+function resultFor(key) {
+  const ov = state.overrides.get(key);
+  if (ov) return { margin: ov.margin, reporting: ov.reporting, candidates: [], called: false, source: 'manual' };
+  return state.live.get(key) || null;
+}
+
+/* ============================================================
+   Derived analysis
+   ============================================================ */
+function senateRows() {
+  return DATA.senate2026.map(s => {
+    const key = `senate/${s.state}`;
+    const res = resultFor(key);
+    const poll = DATA.polling[key] || null;
+    const live = res && Number.isFinite(res.margin) ? res.margin : null;
+    return {
+      ...s, key, res, poll,
+      live,
+      reporting: res ? res.reporting : null,
+      pollError: (live !== null && poll) ? live - poll.margin : null,
+      swing2024: (live !== null && Number.isFinite(s.trump2024)) ? live - s.trump2024 : null,
+      swingLast: (live !== null && s.lastSenate && Number.isFinite(s.lastSenate.margin) && !s.lastSenate.uncontested)
+        ? live - s.lastSenate.margin : null,
+    };
+  });
+}
+
+/**
+ * Governor rows come from whatever the feed has published, joined to the 2024
+ * presidential baseline. There is no "last gubernatorial margin" column: no
+ * fetchable statewide governor-history dataset was found, so rather than show a
+ * half-sourced number the comparison is left to Trump 2024 and the poll average.
+ */
+function govRows() {
+  const out = [];
+  for (const [key, res] of state.live) {
+    if (!key.startsWith('gov/')) continue;
+    const st = key.slice(4);
+    const poll = DATA.polling[key] || null;
+    const live = Number.isFinite(res.margin) ? res.margin : null;
+    const trump2024 = DATA.trump2024ByState[st] ?? null;
+    out.push({
+      key, state: st, stateName: DATA.stateNames[st] || st, res, poll, live,
+      trump2024, raceId: res.raceId,
+      reporting: res.reporting,
+      pollError: (live !== null && poll) ? live - poll.margin : null,
+      swing2024: (live !== null && Number.isFinite(trump2024)) ? live - trump2024 : null,
+      competitiveness: Number.isFinite(trump2024) ? Math.abs(trump2024) : 999,
+    });
+  }
+  // Overrides can name a governor race the feed has not published at all.
+  for (const [key, ov] of state.overrides) {
+    if (!key.startsWith('gov/') || out.some(r => r.key === key)) continue;
+    const st = key.slice(4);
+    const poll = DATA.polling[key] || null;
+    const trump2024 = DATA.trump2024ByState[st] ?? null;
+    out.push({
+      key, state: st, stateName: DATA.stateNames[st] || st,
+      res: { margin: ov.margin, reporting: ov.reporting, candidates: [], called: false, source: 'manual' },
+      poll, live: ov.margin, trump2024, reporting: ov.reporting,
+      pollError: poll ? ov.margin - poll.margin : null,
+      swing2024: Number.isFinite(trump2024) ? ov.margin - trump2024 : null,
+      competitiveness: Number.isFinite(trump2024) ? Math.abs(trump2024) : 999,
+    });
+  }
+  return out;
+}
+
+function houseRows() {
+  return DATA.houseWatch.map(d => {
+    const key = `house/${d.district}`;
+    const res = resultFor(key);
+    const poll = DATA.polling[key] || null;
+    const live = res && Number.isFinite(res.margin) ? res.margin : null;
+    return {
+      ...d, key, res, poll, live,
+      reporting: res ? res.reporting : null,
+      pollError: (live !== null && poll) ? live - poll.margin : null,
+      swing2024: (live !== null && Number.isFinite(d.trump2024)) ? live - d.trump2024 : null,
+      swingLast: (live !== null && d.house2024 && Number.isFinite(d.house2024.margin) && !d.house2024.uncontested && !d.house2024.effectivelyUncontested)
+        ? live - d.house2024.margin : null,
+    };
+  });
+}
+
+/**
+ * Systemic error across races: the mean SIGNED error is the bias (are polls
+ * missing in one direction everywhere?), the mean ABSOLUTE error is accuracy.
+ * Only races above the reporting threshold are counted, because a partial count
+ * is dominated by which vote mode happened to be tallied first.
+ */
+function errorStats(rows, threshold) {
+  const used = rows.filter(r => r.pollError !== null && (r.reporting ?? 0) >= threshold);
+  if (!used.length) return { n: 0, used };
+  const errs = used.map(r => r.pollError);
+  const mean = errs.reduce((a, b) => a + b, 0) / errs.length;
+  const mae = errs.reduce((a, b) => a + Math.abs(b), 0) / errs.length;
+  const sorted = [...errs].sort((a, b) => a - b);
+  const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2]
+    : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  const sd = errs.length > 1
+    ? Math.sqrt(errs.reduce((a, b) => a + (b - mean) ** 2, 0) / (errs.length - 1)) : null;
+  return { n: errs.length, mean, mae, median, sd, used, towardR: errs.filter(e => e > 0).length };
+}
+
+/**
+ * County-level swing: each county's current margin against its own 2024 margin,
+ * weighted by 2024 turnout and share reporting. This is the metric that stays
+ * meaningful early, since it compares like with like rather than comparing a
+ * half-counted state to a full-turnout poll.
+ */
+/**
+ * FIPS is present on 34 of the 35 2026 Senate races but is NOT guaranteed —
+ * some races (and most historical ones) return regions with no fips at all.
+ * Falling back to a name match keeps the panel working if the feed changes
+ * shape mid-night. Ambiguous names are left unmatched rather than guessed.
+ */
+let _byName = null;
+function countyNameIndex() {
+  if (_byName) return _byName;
+  const norm = (s) => String(s || '').toLowerCase()
+    .replace(/\b(county|parish|borough|census area|municipality|city and borough)\b/g, '')
+    .replace(/[^a-z]/g, '');
+  const seen = new Map(), dupes = new Set();
+  for (const [fips, c] of Object.entries(DATA.counties)) {
+    const k = `${c.st}|${norm(c.n)}`;
+    if (seen.has(k)) dupes.add(k); else seen.set(k, fips);
+  }
+  for (const k of dupes) seen.delete(k);   // e.g. Virginia's paired city/county names
+  _byName = { map: seen, norm };
+  return _byName;
+}
+
+function countyAnalysis(raceKey, regions) {
+  const st = raceKey.split('/')[1];
+  const { map, norm } = countyNameIndex();
+  const rows = [];
+  let wSwing = 0, wSum = 0, unmatched = 0, nonCounty = 0;
+  for (const [key, reg] of Object.entries(regions || {})) {
+    // Alaska returns one region of type "State" — it reports by district, not
+    // county, so there is nothing to compare against a county baseline.
+    if (reg.type && !/county|parish|borough|city|census/i.test(reg.type)) { nonCounty++; continue; }
+    let fips = reg.fips ? String(reg.fips).padStart(5, '0') : null;
+    if (!fips || !DATA.counties[fips]) {
+      fips = map.get(`${st}|${norm(reg.name || key)}`) || null;
+    }
+    const base = fips ? DATA.counties[fips] : null;
+    const rep = +reg.percent_reporting || 0;
+    const m = marginFromRace({ candidates: reg.candidates, percent_reporting: rep });
+    if (!base) { if (m.total > 0) unmatched++; continue; }
+    // Counties with no votes yet are KEPT: they are exactly the ones the
+    // projection has to fill in, and dropping them would silently shrink the
+    // electorate to whoever happened to report early.
+    const hasVotes = m.margin !== null && m.twoSum > 0;
+    const swing = hasVotes ? m.margin - base.m : null;
+    const weight = hasVotes ? (base.v || 0) * Math.max(rep, 1) / 100 : 0;
+    rows.push({
+      fips, name: base.n, base: base.m, live: hasVotes ? m.margin : null, swing,
+      reporting: rep, votes: hasVotes ? m.total : 0, weight,
+      counted2: hasVotes ? m.twoSum : 0,  // top-two votes counted so far
+      baseV2: base.v2 || base.v || 0,     // 2024 two-party votes, the turnout anchor
+    });
+    if (hasVotes) { wSwing += swing * weight; wSum += weight; }
+  }
+  rows.sort((a, b) => b.baseV2 - a.baseV2);   // stable ordering by county size
+  const weighted = wSum > 0 ? wSwing / wSum : null;
+  const stateBase = DATA.trump2024ByState[st];
+  return {
+    rows, weighted,
+    implied: (weighted !== null && Number.isFinite(stateBase)) ? stateBase + weighted : null,
+    stateBase, st, counted: rows.length, unmatched, nonCounty,
+  };
+}
+
+/* ============================================================
+   Swing-transfer projection
+   ------------------------------------------------------------
+   Projects a final statewide margin from a partial count.
+
+   The core idea: do NOT blend a county toward its 2024 result. Blend it toward
+   its 2024 result PLUS the swing observed elsewhere in the state. Blending
+   toward the bare baseline assumes zero swing in everything uncounted, which
+   drags the projection back toward the last election all night and understates
+   whatever is actually happening.
+
+   Steps:
+     1. Estimate turnout scale k (midterm turnout vs 2024) from counties that
+        are meaningfully counted.
+     2. Estimate swing vs 2024, pooled within strata of 2024 partisan lean, so
+        the swing transfers from similar counties rather than uniformly.
+     3. For each county, shrink its own observed swing toward its stratum swing
+        by how much of it is counted.
+     4. Fill the uncounted remainder at (baseline + shrunk swing) and total it
+        all up in votes.
+
+   The honest limit: every partial is biased by WHICH BALLOTS were counted first
+   (mail vs election-day), and that bias is common to all counties in a state.
+   No amount of cross-county pooling removes it — only time does. It is carried
+   in the uncertainty band, not corrected away.
+   ============================================================ */
+
+const LEAN_STRATA = [
+  { id: 0, lo: -Infinity, hi: -20, label: 'Safe D' },
+  { id: 1, lo: -20, hi: -5, label: 'Lean D' },
+  { id: 2, lo: -5, hi: 5, label: 'Even' },
+  { id: 3, lo: 5, hi: 20, label: 'Lean R' },
+  { id: 4, lo: 20, hi: Infinity, label: 'Safe R' },
+];
+const stratumOf = (base) => LEAN_STRATA.find(s => base >= s.lo && base < s.hi) || LEAN_STRATA[2];
+
+const PROJ = {
+  minRepForTurnout: 25,   // % reporting a county needs before it informs turnout scale
+  minRepForSwing: 20,     // % reporting before a county's own swing is trusted at all
+  minStratumCounties: 3,  // below this, a stratum falls back to the statewide swing
+  floorSigma: 0.4,        // late provisional / cure drift
+  // How wrong the prior can be, in points of margin, before anything is counted.
+  // Both are ASSUMPTIONS you can tune, not measured constants.
+  pollSigma: 5.0,         // with a polling average to anchor on
+  returnsPriorSigma: 8.0, // without one, inferring the swing from partial returns
+  defaultTurnout: 0.70,   // midterm turnout vs 2024, before any county reports
+};
+
+function projectRace(st, rows, poll) {
+  const stateBase = DATA.trump2024ByState[st];
+  const counted = rows.filter(r => r.counted2 > 0);
+  if (!Number.isFinite(stateBase) || !rows.length) return null;
+  // With a polling average there is a projection before a single vote is in:
+  // at 0% reporting it reproduces the poll exactly.
+  if (!counted.length && !poll) return null;
+
+  /* --- 1. turnout scale: how big is this electorate vs 2024? --- */
+  let tNum = 0, tDen = 0;
+  for (const r of rows) {
+    if (r.reporting < PROJ.minRepForTurnout || !r.counted2) continue;
+    tNum += r.counted2;
+    tDen += r.baseV2 * (r.reporting / 100);
+  }
+  // Clamp to a plausible midterm-vs-presidential range; fall back to 0.7 if we
+  // cannot measure it yet. k only scales turnout, so modest error here is mild.
+  const kRaw = tDen > 0 ? tNum / tDen : null;
+  const k = kRaw === null ? PROJ.defaultTurnout : Math.min(1.3, Math.max(0.4, kRaw));
+
+  /* --- 2. swing, pooled statewide and within lean strata --- */
+  const usable = counted.filter(r => r.reporting >= PROJ.minRepForSwing && r.swing !== null);
+  const wmean = (arr) => {
+    let n = 0, d = 0;
+    for (const r of arr) { n += r.swing * r.counted2; d += r.counted2; }
+    return d > 0 ? n / d : null;
+  };
+  const S = wmean(usable);
+  if (S === null && !poll) return null;
+
+  // No early-count correction. A county that is behind on counting and a county
+  // that genuinely moved look identical from here, and any rule that tells them
+  // apart is really just an assumption about which counties count slowly. Guessing
+  // wrong erases real movement, so the observed margin is taken at face value and
+  // the uncertainty band carries the risk instead.
+  const Sobs = S ?? 0;
+
+  const strata = new Map();
+  for (const s of LEAN_STRATA) {
+    const members = usable.filter(r => stratumOf(r.base).id === s.id);
+    const sw = members.length >= PROJ.minStratumCounties ? wmean(members) : null;
+    strata.set(s.id, { ...s, swing: sw === null ? Sobs : sw, n: members.length, pooled: sw === null });
+  }
+
+  /* --- 3 & 4. fill each county's remainder, then total in votes --- */
+  // How wrong the prior could be, in points of margin. A polling average carries
+  // polling error; a prior read off partial returns is shakier still.
+  const priorSigma = poll ? PROJ.pollSigma : PROJ.returnsPriorSigma;
+
+  let totR = 0, totO = 0, countedTotal = 0, expectedTotal = 0, sigmaWeighted = 0;
+  const detail = [];
+  for (const r of rows) {
+    const expected = Math.max(r.baseV2 * k, r.counted2);   // never project fewer votes than are already in
+    const remaining = Math.max(0, expected - r.counted2);
+    const stratumSwing = strata.get(stratumOf(r.base).id).swing;
+
+    // PRIOR: what this county is expected to do before its own votes are seen.
+    // With a polling average, the prior is the poll's implied statewide swing
+    // applied to the county's 2024 margin. The poll is an external estimate, so
+    // unlike a swing read off partial returns it carries no count-order skew.
+    // Without a poll, fall back to the swing observed in similar counties.
+    const priorSwing = poll ? (poll.margin - stateBase) : stratumSwing;
+    const priorMargin = r.base + priorSwing;
+
+    // OBSERVED: the county's margin as actually counted, at face value.
+    const observed = r.live;
+
+    // BLEND, weighted by how much of the county is counted.
+    const w = observed === null ? 0 : Math.min(Math.max(r.reporting, 0), 100) / 100;
+    const finalHat = Math.max(-100, Math.min(100, priorMargin * (1 - w) + observed * w));
+
+    // Per-county error: full prior error when nothing is counted, zero when the
+    // county is done. These are summed (turnout-weighted) rather than added in
+    // quadrature, so they do not cancel out — the right call here, since a
+    // polling miss hits every county in the state the same way.
+    sigmaWeighted += expected * priorSigma * (1 - w);
+
+    totR += expected * (1 + finalHat / 100) / 2;
+    totO += expected * (1 - finalHat / 100) / 2;
+    countedTotal += r.counted2; expectedTotal += expected;
+    detail.push({ ...r, expected, remaining, priorMargin, observed, w, finalHat, stratum: stratumOf(r.base).label });
+  }
+
+  const projected = (totR + totO) > 0 ? ((totR - totO) / (totR + totO)) * 100 : null;
+  const R = expectedTotal > 0 ? countedTotal / expectedTotal : 0;   // share of EXPECTED vote counted
+
+  /* --- margin of error ---
+     Each county carries the prior's error scaled by how much of it is still
+     uncounted, and those are summed across the state weighted by expected
+     turnout. Deliberately simple: it starts at the prior's error, falls as votes
+     land, and reaches the floor when counting finishes. It is a visual aid, not
+     a calibrated confidence interval. */
+  const sigma = (expectedTotal > 0 ? sigmaWeighted / expectedTotal : priorSigma) + PROJ.floorSigma;
+
+  // Spread of county swings, kept for display only.
+  let vNum = 0, vDen = 0;
+  for (const r of usable) { vNum += Math.pow(r.swing - Sobs, 2) * r.counted2; vDen += r.counted2; }
+  const sdSwing = vDen > 0 && usable.length > 1 ? Math.sqrt(vNum / vDen) : null;
+
+  return {
+    projected, sigma, lo: projected - sigma, hi: projected + sigma,
+    R, k, kRaw, S: Sobs, sdSwing, stateBase, priorSigma,
+    poll: poll ? poll.margin : null,
+    priorSwing: poll ? poll.margin - stateBase : null,
+    anchor: poll ? 'poll' : 'returns',
+    strata: [...strata.values()],
+    countiesUsed: usable.length, countiesCounted: counted.length, countiesTotal: rows.length,
+    countedTotal, expectedTotal, detail,
+  };
+}
+
+/* ============================================================
+   Senate control arithmetic
+   ------------------------------------------------------------
+   53 R / 45 D / 2 independents who caucus with Democrats = 53-47, no vacancies.
+   13 of the 35 seats on the ballot were last won by Democrats, so Democrats hold
+   34 seats that are NOT up; 51 - 34 = 17 of these 35 are needed for a majority
+   (13 holds + a net gain of 4). The 17th most Democratic-favourable race is the
+   tipping point — the "51st seat".
+   ============================================================ */
+const SENATE = { currentD: 47, majority: 51 };
+function senateMath(rows) {
+  const dSeatsUp = rows.filter(r => r.lastSenate && r.lastSenate.winnerParty === 'D').length;
+  const holdovers = SENATE.currentD - dSeatsUp;
+  return { dSeatsUp, holdovers, needed: SENATE.majority - holdovers, total: rows.length };
+}
+
+/**
+ * State-level version of the same blend used per-county, for the overview chart.
+ * It needs only the margin and percent_reporting the search endpoint already
+ * returns, so the chart costs no extra requests — the county-level version stays
+ * in the detail panel for whichever race is selected.
+ */
+function projectSimple(row) {
+  const poll = row.poll;
+  const prior = poll ? poll.margin : (Number.isFinite(row.trump2024) ? row.trump2024 : null);
+  if (prior === null && row.live === null) return null;
+  const priorSigma = poll ? PROJ.pollSigma : PROJ.returnsPriorSigma;
+  const r = Math.min(Math.max(row.reporting ?? 0, 0), 100) / 100;
+  const obs = row.live;
+  const projected = obs === null ? prior : (prior === null ? obs : prior * (1 - r) + obs * r);
+  const sigma = (prior === null ? 0 : priorSigma * (1 - r)) + PROJ.floorSigma;
+  return {
+    projected, sigma, lo: projected - sigma, hi: projected + sigma,
+    anchor: poll ? 'poll' : '2024', reporting: r * 100,
+  };
+}
+
+/**
+ * Seat counts for the House and for governorships, using the same blend as
+ * everywhere else: start from a prior and let counted votes displace it.
+ *
+ * For the House the prior is each district's 2024 result, which reproduces the
+ * real 220 R / 215 D split before anything is counted — an honest "if nothing
+ * changed" starting point rather than a forecast. The feed has published almost
+ * no 2026 House races, so `live` says how much of this is real.
+ */
+function houseProjection() {
+  let D = 0, R = 0, live = 0;
+  for (const [dist, h] of Object.entries(DATA.house2024)) {
+    const poll = DATA.polling[`house/${dist}`];
+    const prior = poll ? poll.margin : h.margin;
+    let m = prior;
+    const res = resultFor(`house/${dist}`);
+    if (res && Number.isFinite(res.margin)) {
+      const w = Math.min(Math.max(res.reporting ?? 0, 0), 100) / 100;
+      m = prior * (1 - w) + res.margin * w;
+      if (w > 0) live++;
+    }
+    if (m < 0) D++; else R++;
+  }
+  return { D, R, live, total: D + R, majority: 218 };
+}
+
+function govProjection(rows) {
+  let D = 0, R = 0, live = 0;
+  for (const r of rows) {
+    const p = projectSimple(r);
+    if (!p) continue;
+    if (p.projected < 0) D++; else R++;
+    if ((r.reporting ?? 0) > 0) live++;
+  }
+  return { D, R, live, total: D + R };
+}
+
+/* ============================================================
+   Senate map: one row per race, sorted by projected margin
+   ============================================================ */
+function renderSenateChart(rows) {
+  const host = $('#senatechart');
+  const data = rows.map(r => ({ ...r, proj: projectSimple(r) })).filter(r => r.proj)
+    .sort((a, b) => a.proj.projected - b.proj.projected);   // most Democratic first
+  if (!data.length) { host.replaceChildren(); return; }
+
+  const math = senateMath(rows);
+  const tipIndex = math.needed - 1;                          // 0-based row of the 51st seat
+  const tipState = data[tipIndex] ? data[tipIndex].stateName : null;
+  const projD = data.filter(r => r.proj.projected < 0).length;
+
+  $('#chartcount').textContent = `· ${data.length} races`;
+  $('#chartsub').innerHTML =
+    `Sorted by projected margin. Democrats need <b>${math.needed}</b> of these ${math.total} `
+    + `(${math.dSeatsUp} holds + a net gain of ${math.needed - math.dSeatsUp}) to reach 51, `
+    + `holding ${math.holdovers} seats that are not on the ballot. `
+    + `Projected now: <b>D ${math.holdovers + projD} – R ${100 - math.holdovers - projD}</b>.`;
+
+  const W = 1000, rowH = 21;
+  // The majority threshold gets its own band rather than a line drawn through
+  // the rows: nothing collides with it, and the split reads as structural.
+  const GAP = 22;
+  const hasTip = tipIndex >= 0 && tipIndex < data.length - 1;
+  const pad = { l: 132, r: 96, t: 38, b: 30 };
+  const H = pad.t + data.length * rowH + (hasTip ? GAP : 0) + pad.b;
+  const vals = data.flatMap(r => [r.proj.lo, r.proj.hi, r.trump2024, r.lastSenate ? r.lastSenate.margin : null])
+    .filter(Number.isFinite);
+  const lim = Math.max(10, Math.ceil(Math.max(...vals.map(Math.abs)) / 5) * 5);
+  const x = (v) => pad.l + ((v + lim) / (2 * lim)) * (W - pad.l - pad.r);
+  const y = (i) => pad.t + i * rowH + rowH / 2 + (hasTip && i > tipIndex ? GAP : 0);
+  const tipY = pad.t + (tipIndex + 1) * rowH + GAP / 2;
+
+  const P = [];
+  // grid + axis
+  const step = lim > 40 ? 20 : lim > 20 ? 10 : 5;
+  for (let v = -Math.floor(lim / step) * step; v <= lim; v += step) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${x(v)}" x2="${x(v)}" y1="${pad.t - 10}" y2="${H - pad.b}"/>`);
+    P.push(`<text x="${x(v)}" y="${pad.t - 16}" text-anchor="middle">${v === 0 ? 'EVEN' : (v > 0 ? 'R+' : 'D+') + Math.abs(v)}</text>`);
+  }
+  P.push(`<text x="${pad.l}" y="${H - 8}" text-anchor="start">← Democratic margin</text>`);
+  P.push(`<text x="${W - pad.r}" y="${H - 8}" text-anchor="end">Republican margin →</text>`);
+
+  data.forEach((r, i) => {
+    const yy = y(i), p = r.proj, c = marginColor(p.projected);
+    P.push(`<rect class="hitrow" data-i="${i}" x="0" y="${yy - rowH / 2}" width="${W}" height="${rowH}" rx="3"/>`);
+    P.push(`<text class="lbl" x="${pad.l - 12}" y="${yy + 4}" text-anchor="end">${esc(r.stateName)}</text>`);
+
+    // error bar with end caps
+    P.push(`<line x1="${x(p.lo)}" x2="${x(p.hi)}" y1="${yy}" y2="${yy}" stroke="${c}" stroke-width="2" opacity="0.5"/>`);
+    for (const e of [p.lo, p.hi])
+      P.push(`<line x1="${x(e)}" x2="${x(e)}" y1="${yy - 4}" y2="${yy + 4}" stroke="${c}" stroke-width="1.5" opacity="0.5"/>`);
+
+    // reference marks: shape carries identity, so neither relies on hue alone
+    if (r.lastSenate && Number.isFinite(r.lastSenate.margin))
+      P.push(`<line x1="${x(r.lastSenate.margin)}" x2="${x(r.lastSenate.margin)}" y1="${yy - 5}" y2="${yy + 5}" stroke="var(--ink-muted)" stroke-width="2"/>`);
+    if (Number.isFinite(r.trump2024)) {
+      const tx = x(r.trump2024);
+      P.push(`<path d="M${tx} ${yy - 5} L${tx + 5} ${yy} L${tx} ${yy + 5} L${tx - 5} ${yy} Z" fill="none" stroke="var(--ink-2)" stroke-width="1.6"/>`);
+    }
+    // projected: the hero mark
+    P.push(`<circle class="mark" cx="${x(p.projected)}" cy="${yy}" r="5.5" fill="${c}"/>`);
+    P.push(`<text class="lbl" x="${W - pad.r + 10}" y="${yy + 4}" text-anchor="start" fill="${c}">${marginLabel(p.projected)}</text>`);
+  });
+
+  // the 51st seat: a labelled band in its own gap between the two blocks
+  if (hasTip) {
+    const label = `51st seat — ${tipState || ''}`;
+    P.push(`<line x1="2" x2="${W - 2}" y1="${tipY}" y2="${tipY}" stroke="var(--warning)" stroke-width="2" stroke-dasharray="7 4"/>`);
+    const bw = 15 + label.length * 6.9;
+    P.push(`<rect x="${pad.l + 10}" y="${tipY - 9}" width="${bw}" height="18" rx="9" fill="var(--surface-1)" stroke="var(--warning)" stroke-width="1"/>`);
+    P.push(`<text x="${pad.l + 10 + bw / 2}" y="${tipY + 4}" text-anchor="middle" fill="var(--warning)" font-weight="600">${esc(label)}</text>`);
+    P.push(`<text x="${W - 6}" y="${tipY - 7}" text-anchor="end" fill="var(--ink-muted)">Democrats need every race above this line</text>`);
+  }
+
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Projected Senate margin by state">${P.join('')}</svg>` }).firstElementChild;
+  svg.querySelectorAll('.hitrow').forEach(n => {
+    n.addEventListener('mousemove', (ev) => {
+      const r = data[+n.dataset.i], p = r.proj;
+      showTip(ev, `<b>${esc(r.stateName)}${r.special ? ' (special)' : ''}</b>
+        <div class="tr"><span>Projected</span><span>${marginLabel(p.projected)} ±${p.sigma.toFixed(1)}</span></div>
+        <div class="tr muted"><span>range</span><span>${marginLabel(p.lo)} to ${marginLabel(p.hi)}</span></div>
+        <div class="tr"><span>Counted</span><span>${p.reporting.toFixed(0)}%</span></div>
+        <div class="tr"><span>Polling avg</span><span>${r.poll ? marginLabel(r.poll.margin) : '—'}</span></div>
+        <div class="tr"><span>Trump 2024</span><span>${marginLabel(r.trump2024)}</span></div>
+        <div class="tr"><span>Last Senate</span><span>${r.lastSenate ? marginLabel(r.lastSenate.margin) + " '" + String(r.lastSenate.year).slice(2) : '—'}</span></div>
+        <div class="tr muted"><span>anchored on</span><span>${p.anchor === 'poll' ? 'polling average' : '2024 result'}</span></div>`);
+    });
+    n.addEventListener('mouseleave', hideTip);
+  });
+  host.replaceChildren(svg);
+
+  // legend: shapes, so identity never rests on colour alone
+  const sw = (inner) => `<svg width="16" height="14" style="vertical-align:-2px">${inner}</svg>`;
+  $('#chartlegend').innerHTML = [
+    `<span>${sw('<circle cx="8" cy="7" r="5" fill="var(--ink-2)"/>')} <b>Projected</b> ±error</span>`,
+    `<span>${sw('<path d="M8 2 L13 7 L8 12 L3 7 Z" fill="none" stroke="var(--ink-2)" stroke-width="1.6"/>')} Trump 2024</span>`,
+    `<span>${sw('<line x1="8" y1="2" x2="8" y2="12" stroke="var(--ink-muted)" stroke-width="2"/>')} Last Senate</span>`,
+    `<span>${sw('<line x1="0" y1="7" x2="16" y2="7" stroke="var(--warning)" stroke-width="2" stroke-dasharray="4 3"/>')} 51st seat</span>`,
+  ].join('');
+}
+
+/* ============================================================
+   Rendering — tiles
+   ============================================================ */
+function renderTiles(rows, stats) {
+  const seats = { D: 0, R: 0, I: 0 };
+  let calledCount = 0;
+  for (const r of rows) {
+    if (r.res && r.res.called && r.res.calledFor) {
+      seats[r.res.calledFor] = (seats[r.res.calledFor] || 0) + 1;
+      calledCount++;
+    }
+  }
+  const reporting = rows.filter(r => (r.reporting ?? 0) > 0).length;
+  const withPolls = rows.filter(r => r.poll).length;
+
+  const tiles = [];
+
+  // Who holds the Senate is the headline of the night, so it leads the summary.
+  const math = senateMath(rows);
+  const projD = rows.map(r => projectSimple(r)).filter(p => p && p.projected < 0).length;
+  const totalD = math.holdovers + projD;
+  const demMajority = totalD >= SENATE.majority;
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Projected Senate' }),
+    el('div', {
+      class: 'val',
+      style: `color:${demMajority ? 'var(--dem)' : 'var(--rep)'}`,
+      text: `D ${totalD} – R ${100 - totalD}`,
+    }),
+    el('div', { class: 'seatbar' }, [
+      el('span', { style: `flex:${Math.max(totalD, 0.001)};background:var(--dem)` }),
+      el('span', { style: `flex:${Math.max(100 - totalD, 0.001)};background:var(--rep)` }),
+    ]),
+    el('div', { class: 'note',
+      text: `${demMajority ? 'Democratic' : 'Republican'} majority · needs ${math.needed} of ${math.total} on the ballot` }),
+  ]));
+
+  // House
+  const hp = houseProjection();
+  const houseDem = hp.D >= hp.majority;
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Projected House' }),
+    el('div', { class: 'val', style: `color:${houseDem ? 'var(--dem)' : 'var(--rep)'}`,
+      text: `D ${hp.D} – R ${hp.R}` }),
+    el('div', { class: 'seatbar' }, [
+      el('span', { style: `flex:${Math.max(hp.D, 0.001)};background:var(--dem)` }),
+      el('span', { style: `flex:${Math.max(hp.R, 0.001)};background:var(--rep)` }),
+    ]),
+    el('div', { class: 'note', text: hp.live
+      ? `${hp.live} of ${hp.total} districts counting · 218 for control`
+      : `2024 baseline — no district has reported yet` }),
+  ]));
+
+  // Governors
+  const gp = govProjection(govRows());
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Projected governors' }),
+    el('div', { class: 'val', text: gp.total ? `D ${gp.D} – R ${gp.R}` : '—' }),
+    gp.total ? el('div', { class: 'seatbar' }, [
+      el('span', { style: `flex:${Math.max(gp.D, 0.001)};background:var(--dem)` }),
+      el('span', { style: `flex:${Math.max(gp.R, 0.001)};background:var(--rep)` }),
+    ]) : null,
+    el('div', { class: 'note', text: gp.total
+      ? `${gp.total} races on the ballot · ${gp.live} counting`
+      : 'no governor races published by the feed' }),
+  ]));
+
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Senate races called' }),
+    el('div', { class: 'val', text: `${calledCount} / ${rows.length}` }),
+    el('div', { class: 'seatbar' }, ['D', 'R', 'I'].map(p => el('span', {
+      style: `flex:${Math.max(seats[p], 0.001)};background:${partyColor(p)}`,
+    }))),
+    el('div', { class: 'note', html: `D ${seats.D} · R ${seats.R} · Ind. ${seats.I}` }),
+  ]));
+
+  // Headline systemic-error tile.
+  const biasText = stats.n === 0 ? 'no comparable races yet'
+    : `${Math.abs(stats.mean).toFixed(1)} pts toward ${stats.mean > 0 ? 'Republicans' : 'Democrats'}`;
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Mean polling error' }),
+    el('div', {
+      class: 'val',
+      style: stats.n ? `color:${marginColor(stats.mean)}` : '',
+      text: stats.n ? fmt(stats.mean) : '—',
+    }),
+    el('div', {
+      class: 'note',
+      text: stats.n ? `${biasText} · ${stats.n} race${stats.n === 1 ? '' : 's'} counted` : 'needs polling averages + results',
+    }),
+  ]));
+
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Mean absolute error' }),
+    el('div', { class: 'val', text: stats.n ? stats.mae.toFixed(1) : '—' }),
+    el('div', { class: 'note', text: stats.n ? `median ${fmt(stats.median)} · sd ${stats.sd ? stats.sd.toFixed(1) : '—'}` : 'how far off, ignoring direction' }),
+  ]));
+
+  const swings = rows.map(r => r.swing2024).filter(Number.isFinite);
+  const meanSwing = swings.length ? swings.reduce((a, b) => a + b, 0) / swings.length : null;
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Mean swing vs Trump 2024' }),
+    el('div', { class: 'val', style: meanSwing !== null ? `color:${marginColor(meanSwing)}` : '', text: meanSwing !== null ? fmt(meanSwing) : '—' }),
+    el('div', { class: 'note', text: meanSwing !== null
+      ? `${swings.length} races · toward ${meanSwing > 0 ? 'R' : 'D'}` : 'awaiting results' }),
+  ]));
+
+  tiles.push(el('div', { class: 'tile' }, [
+    el('div', { class: 'label', text: 'Feed coverage' }),
+    el('div', { class: 'val', text: `${reporting}/${rows.length}` }),
+    el('div', { class: 'note', text: `${withPolls} race${withPolls === 1 ? '' : 's'} have a polling average loaded` }),
+  ]));
+
+  const t = $('#tiles'); t.replaceChildren(...tiles);
+}
+
+/* ============================================================
+   Rendering — polling-error dot plot
+   ============================================================ */
+function renderErrorChart(rows, stats) {
+  const zone = $('#errorzone');
+  if (!stats.n) {
+    zone.replaceChildren(el('div', { class: 'warnbox', html:
+      DATA.meta.counts.pollingRows === 0
+        ? 'No polling averages are loaded yet, so polling error cannot be computed. Add rows to <code>data/polling_averages.csv</code> and re-run the build — the rest of the board works without them.'
+        : 'No race has both a polling average and enough counted vote to compare yet.' }));
+    return;
+  }
+  const used = [...stats.used].sort((a, b) => a.pollError - b.pollError);
+  const H = 26 * used.length + 44;
+  const pad = { l: 128, r: 58, t: 26, b: 18 };
+  const max = Math.max(6, ...used.map(r => Math.abs(r.pollError))) * 1.12;
+  const W = 1000;
+  const x = v => pad.l + ((v + max) / (2 * max)) * (W - pad.l - pad.r);
+
+  const ticks = [];
+  const stepT = max > 18 ? 10 : max > 9 ? 5 : 2;
+  for (let v = -Math.floor(max / stepT) * stepT; v <= max; v += stepT) ticks.push(v);
+
+  const parts = [];
+  for (const v of ticks) {
+    parts.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${x(v)}" x2="${x(v)}" y1="${pad.t - 8}" y2="${H - pad.b}"/>`);
+    parts.push(`<text x="${x(v)}" y="${pad.t - 13}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+  }
+  parts.push(`<text x="${pad.l}" y="${H - 4}" text-anchor="start">← polls overstated Republicans</text>`);
+  parts.push(`<text x="${W - pad.r}" y="${H - 4}" text-anchor="end">polls understated Republicans →</text>`);
+
+  // mean marker
+  parts.push(`<line x1="${x(stats.mean)}" x2="${x(stats.mean)}" y1="${pad.t - 8}" y2="${H - pad.b}" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="5 3"/>`);
+  parts.push(`<text x="${x(stats.mean)}" y="${H - pad.b + 13}" text-anchor="middle" class="lbl">mean ${fmt(stats.mean)}</text>`);
+
+  used.forEach((r, i) => {
+    const y = pad.t + i * 26;
+    parts.push(`<rect class="hitrow" data-i="${i}" x="0" y="${y - 12}" width="${W}" height="24" rx="4"/>`);
+    parts.push(`<text class="lbl" x="${pad.l - 12}" y="${y + 4}" text-anchor="end">${esc(r.stateName || r.district)}</text>`);
+    parts.push(`<line x1="${x(0)}" x2="${x(r.pollError)}" y1="${y}" y2="${y}" stroke="${marginColor(r.pollError)}" stroke-width="2"/>`);
+    parts.push(`<circle class="mark" cx="${x(r.pollError)}" cy="${y}" r="5.5" fill="${marginColor(r.pollError)}"/>`);
+    parts.push(`<text class="lbl" x="${x(r.pollError) + (r.pollError >= 0 ? 12 : -12)}" y="${y + 4}" text-anchor="${r.pollError >= 0 ? 'start' : 'end'}">${fmt(r.pollError)}</text>`);
+  });
+
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Polling error by race">${parts.join('')}</svg>` }).firstElementChild;
+  svg.querySelectorAll('.hitrow').forEach(n => {
+    n.addEventListener('mousemove', (ev) => {
+      const r = used[+n.dataset.i];
+      showTip(ev, `<b>${esc(r.stateName || r.district)}</b>
+        <div class="tr"><span>Polling average</span><span>${marginLabel(r.poll.margin)}</span></div>
+        <div class="tr"><span>Result so far</span><span>${marginLabel(r.live)}</span></div>
+        <div class="tr"><span>Error</span><span>${fmt(r.pollError)} toward ${r.pollError > 0 ? 'R' : 'D'}</span></div>
+        <div class="tr"><span>Counted</span><span>${(r.reporting ?? 0).toFixed(0)}%</span></div>
+        <div class="tr muted"><span>Poll source</span><span>${esc(r.poll.source)}</span></div>`);
+    });
+    n.addEventListener('mouseleave', hideTip);
+  });
+
+  const summary = el('div', { class: 'legend', style: 'margin-top:10px' }, [
+    el('span', { html: `<b>${stats.n}</b> races counted at ≥${$('#threshold').value}% reporting` }),
+    el('span', { html: `<b>${stats.towardR}</b> missed toward R, <b>${stats.n - stats.towardR}</b> toward D` }),
+    el('span', { html: `mean <b>${fmt(stats.mean)}</b> · median <b>${fmt(stats.median)}</b> · MAE <b>${stats.mae.toFixed(1)}</b>` }),
+  ]);
+  zone.replaceChildren(svg, summary);
+}
+
+/* ============================================================
+   Rendering — tables
+   ============================================================ */
+function sortRows(rows, tableId) {
+  const { key, dir } = state.sort[tableId];
+  return [...rows].sort((a, b) => {
+    const av = a[key], bv = b[key];
+    const an = typeof av === 'number' && Number.isFinite(av);
+    const bn = typeof bv === 'number' && Number.isFinite(bv);
+    if (an && bn) return (av - bv) * dir;
+    if (an) return -1;              // real numbers above blanks, both directions
+    if (bn) return 1;
+    return String(av ?? '').localeCompare(String(bv ?? '')) * dir;
+  });
+}
+
+function headerRow(table, cols) {
+  const { key, dir } = state.sort[table.id];
+  const tr = el('tr');
+  for (const c of cols) {
+    const th = el('th', {
+      class: c.l ? 'l' : '', title: c.title || '', text: c.label,
+      ...(c.key === key ? { 'aria-sort': dir === 1 ? 'ascending' : 'descending' } : {}),
+    });
+    if (c.key) th.addEventListener('click', () => {
+      const s = state.sort[table.id];
+      if (s.key === c.key) s.dir *= -1; else { s.key = c.key; s.dir = c.numeric ? -1 : 1; }
+      renderAll();
+    });
+    tr.append(th);
+  }
+  return tr;
+}
+
+function marginCell(v, extra = '') {
+  if (!Number.isFinite(v)) return el('td', { class: 'muted', text: '—' });
+  return el('td', { class: 'cell-margin', style: `color:${marginColor(v)}`, text: marginLabel(v) + extra });
+}
+
+function reportingCell(pct, source) {
+  if (pct === null || pct === undefined) return el('td', { class: 'muted', text: '—' });
+  const td = el('td');
+  td.append(el('div', { style: 'display:flex;align-items:center;gap:7px;justify-content:flex-end' }, [
+    el('span', { text: `${pct.toFixed(0)}%` }),
+    el('span', { class: 'bar', style: 'width:54px' }, [el('i', { style: `width:${Math.min(pct, 100)}%;background:var(--ink-muted)` })]),
+    source === 'manual' ? el('span', { class: 'pill', text: 'manual' }) : null,
+  ]));
+  return td;
+}
+
+function renderSenate(rows) {
+  const table = $('#sentable');
+  const cols = [
+    { label: 'State', key: 'stateName', l: true },
+    { label: 'Leading', l: true, title: 'Top two candidates by votes' },
+    { label: 'Margin', key: 'live', numeric: true, title: 'Current two-candidate margin' },
+    { label: 'Counted', key: 'reporting', numeric: true },
+    { label: 'Poll avg', key: 'pollMargin', numeric: true },
+    { label: 'Error', key: 'pollError', numeric: true, title: 'Result minus polling average' },
+    { label: 'Trump 24', key: 'trump2024', numeric: true },
+    { label: 'Swing', key: 'swing2024', numeric: true, title: 'Margin minus Trump 2024 margin' },
+    { label: 'Last Senate', key: 'lastMargin', numeric: true, title: 'Last time this seat was contested' },
+    { label: 'Swing', key: 'swingLast', numeric: true, title: 'Margin minus that last Senate margin' },
+  ];
+  table.tHead.replaceChildren(headerRow(table, cols));
+
+  const enriched = rows.map(r => ({
+    ...r,
+    pollMargin: r.poll ? r.poll.margin : null,
+    lastMargin: r.lastSenate ? r.lastSenate.margin : null,
+    competitiveness: Number.isFinite(r.trump2024) ? Math.abs(r.trump2024) : 999,
+  }));
+
+  const body = el('tbody');
+  for (const r of sortRows(enriched, 'sentable')) {
+    const top = (r.res?.candidates || []).slice(0, 2);
+    const lead = top.length
+      ? el('td', { class: 'l' }, [
+          el('span', { class: 'swatch', style: `background:${partyColor(top[0].party)}` }),
+          el('span', { text: top[0].name }),
+          r.res.called ? el('span', { class: 'pill called', text: 'called', style: 'margin-left:6px' }) : null,
+        ])
+      : el('td', { class: 'l muted', text: r.candidates.slice(0, 2).map(c => c.name).join(' · ') || '—' });
+
+    const tr = el('tr', { style: 'cursor:pointer' }, [
+      el('td', { class: 'l' }, [
+        el('span', { text: r.stateName }),
+        r.special ? el('span', { class: 'pill', text: 'special', style: 'margin-left:6px' }) : null,
+      ]),
+      lead,
+      marginCell(r.live),
+      reportingCell(r.reporting, r.res?.source),
+      r.poll ? marginCell(r.poll.margin) : el('td', { class: 'muted', text: '—' }),
+      marginCell(r.pollError),
+      marginCell(r.trump2024),
+      marginCell(r.swing2024),
+      r.lastSenate
+        ? el('td', { class: 'cell-margin', style: `color:${marginColor(r.lastSenate.margin)}`,
+            title: `${r.lastSenate.year}${r.lastSenate.special ? ' special' : ''}${r.lastSenate.runoff ? ' runoff' : ''}: ${r.lastSenate.winner} over ${r.lastSenate.runnerUp}${r.lastSenate.note ? ' — ' + r.lastSenate.note : ''}`,
+            text: `${marginLabel(r.lastSenate.margin)} ’${String(r.lastSenate.year).slice(2)}` })
+        : el('td', { class: 'muted', text: '—' }),
+      marginCell(r.swingLast),
+    ]);
+    tr.addEventListener('click', () => selectRace(r.key, r.stateName, r.res?.raceId ?? r.raceId));
+    body.append(tr);
+  }
+  table.tBodies[0].replaceWith(body);
+  $('#sencount').textContent = `· ${rows.length} races`;
+}
+
+function renderGovernor(rows) {
+  const table = $('#govtable');
+  const empty = $('#govempty');
+  if (!rows.length) {
+    table.hidden = true;
+    empty.replaceChildren(el('div', { class: 'warnbox', html:
+      'The feed has published no 2026 governor races yet. This table fills itself in as soon as it does — '
+      + 'run <code>node scripts/fetch_index.mjs</code> to check coverage, or add rows via the override box below '
+      + 'using keys like <code>gov/GA</code>.' }));
+    $('#govcount').textContent = '· none published yet';
+    return;
+  }
+  table.hidden = false;
+  empty.replaceChildren();
+  const cols = [
+    { label: 'State', key: 'stateName', l: true },
+    { label: 'Leading', l: true },
+    { label: 'Margin', key: 'live', numeric: true },
+    { label: 'Counted', key: 'reporting', numeric: true },
+    { label: 'Projected', key: 'projected', numeric: true, title: 'Poll or 2024 prior, displaced by counted votes' },
+    { label: 'Poll avg', key: 'pollMargin', numeric: true },
+    { label: 'Error', key: 'pollError', numeric: true },
+    { label: 'Trump 24', key: 'trump2024', numeric: true },
+    { label: 'Swing', key: 'swing2024', numeric: true },
+  ];
+  state.sort.govtable ??= { key: 'competitiveness', dir: 1 };
+  table.tHead.replaceChildren(headerRow(table, cols));
+  const enriched = rows.map(r => {
+    const p = projectSimple(r);
+    return { ...r, pollMargin: r.poll ? r.poll.margin : null, proj: p, projected: p ? p.projected : null };
+  });
+  const body = el('tbody');
+  for (const r of sortRows(enriched, 'govtable')) {
+    const top = (r.res?.candidates || []).slice(0, 2);
+    const tr = el('tr', { style: r.raceId ? 'cursor:pointer' : '' }, [
+      el('td', { class: 'l', text: r.stateName }),
+      top.length
+        ? el('td', { class: 'l' }, [
+            el('span', { class: 'swatch', style: `background:${partyColor(top[0].party)}` }),
+            el('span', { text: top[0].name }),
+            r.res.called ? el('span', { class: 'pill called', text: 'called', style: 'margin-left:6px' }) : null,
+          ])
+        : el('td', { class: 'l muted', text: '—' }),
+      marginCell(r.live),
+      reportingCell(r.reporting, r.res?.source),
+      r.proj
+        ? el('td', { class: 'cell-margin', style: `color:${marginColor(r.projected)}`,
+            title: `${marginLabel(r.proj.lo)} to ${marginLabel(r.proj.hi)} · anchored on ${r.proj.anchor === 'poll' ? 'the polling average' : 'the 2024 result'}`,
+            text: `${marginLabel(r.projected)} ±${r.proj.sigma.toFixed(1)}` })
+        : el('td', { class: 'muted', text: '—' }),
+      r.poll ? marginCell(r.poll.margin) : el('td', { class: 'muted', text: '—' }),
+      marginCell(r.pollError),
+      marginCell(r.trump2024),
+      marginCell(r.swing2024),
+    ]);
+    if (r.raceId) tr.addEventListener('click', () => selectRace(r.key, r.stateName, r.raceId));
+    body.append(tr);
+  }
+  table.tBodies[0].replaceWith(body);
+  $('#govcount').textContent = `· ${rows.length} race${rows.length === 1 ? '' : 's'}`;
+}
+
+function renderHouse(rows) {
+  const table = $('#housetable');
+  const cols = [
+    { label: 'District', key: 'district', l: true },
+    { label: 'Leading', l: true },
+    { label: 'Margin', key: 'live', numeric: true },
+    { label: 'Counted', key: 'reporting', numeric: true },
+    { label: 'Poll avg', key: 'pollMargin', numeric: true },
+    { label: 'Error', key: 'pollError', numeric: true },
+    { label: 'Trump 24', key: 'trump2024', numeric: true },
+    { label: 'Swing', key: 'swing2024', numeric: true },
+    { label: 'House 24', key: 'houseMargin', numeric: true },
+    { label: 'Swing', key: 'swingLast', numeric: true },
+  ];
+  table.tHead.replaceChildren(headerRow(table, cols));
+  const enriched = rows.map(r => ({
+    ...r,
+    pollMargin: r.poll ? r.poll.margin : null,
+    houseMargin: r.house2024 ? r.house2024.margin : null,
+    competitiveness: Number.isFinite(r.trump2024) ? Math.abs(r.trump2024) : 999,
+  }));
+  const body = el('tbody');
+  for (const r of sortRows(enriched, 'housetable')) {
+    const top = (r.res?.candidates || []).slice(0, 2);
+    const h = r.house2024;
+    body.append(el('tr', {}, [
+      el('td', { class: 'l', text: r.district }),
+      top.length
+        ? el('td', { class: 'l' }, [
+            el('span', { class: 'swatch', style: `background:${partyColor(top[0].party)}` }),
+            el('span', { text: top[0].name }),
+            r.res.called ? el('span', { class: 'pill called', text: 'called', style: 'margin-left:6px' }) : null,
+          ])
+        : el('td', { class: 'l muted', text: '—' }),
+      marginCell(r.live),
+      reportingCell(r.reporting, r.res?.source),
+      r.poll ? marginCell(r.poll.margin) : el('td', { class: 'muted', text: '—' }),
+      marginCell(r.pollError),
+      Number.isFinite(r.trump2024) ? marginCell(r.trump2024)
+        : el('td', { class: 'muted', text: '—', title: 'No 2024 presidential totals published for this district' }),
+      marginCell(r.swing2024),
+      h ? el('td', {
+            class: 'cell-margin', style: `color:${marginColor(h.margin)}`,
+            title: `${h.winner} over ${h.runnerUp ?? 'no opponent'}`,
+            text: (h.uncontested || h.effectivelyUncontested) ? `${h.winnerParty} unopp.` : marginLabel(h.margin),
+          })
+        : el('td', { class: 'muted', text: '—' }),
+      marginCell(r.swingLast),
+    ]));
+  }
+  table.tBodies[0].replaceWith(body);
+  $('#housecount').textContent = `· ${rows.length} districts`;
+}
+
+/* ============================================================
+   County panel
+   ============================================================ */
+async function selectRace(key, label, raceId) {
+  state.selected = raceId ? { key, label, raceId } : null;
+  if (!raceId) return;
+  $('#countypanel').hidden = false;
+  $('#countytitle').textContent = `${label} — county swing vs 2024`;
+  $('#countysub').textContent = 'loading…';
+  await loadCounties(state.selected);
+}
+
+async function loadCounties(sel) {
+  try {
+    const race = await getJSON(`${API}/race/${sel.raceId}`);
+    const a = countyAnalysis(sel.key, race.region_results);
+    state.counties = { ...a, label: sel.label };
+    renderCounties();
+  } catch (e) {
+    $('#countysub').textContent = `could not load county detail: ${e.message}`;
+  }
+}
+
+function renderCounties() {
+  const a = state.counties;
+  if (!a) return;
+  const withVotes = a.rows.filter(r => r.votes > 0);
+  const notes = [];
+  if (a.unmatched) notes.push(`${a.unmatched} reporting area${a.unmatched === 1 ? '' : 's'} could not be matched to a 2024 baseline and ${a.unmatched === 1 ? 'is' : 'are'} excluded`);
+  if (a.nonCounty) notes.push(`${a.nonCounty} non-county region${a.nonCounty === 1 ? '' : 's'} skipped (this state does not report by county)`);
+  $('#countysub').textContent = (withVotes.length
+    ? `${withVotes.length} of ${a.rows.length} counties with votes counted`
+    : 'no county has reported votes yet') + (notes.length ? ' · ' + notes.join(' · ') : '');
+
+  // stats column: the projection, plus the inputs that produced it
+  // Use the polling average for the office actually selected, not always Senate.
+  const office = String(state.selected?.key || 'senate/').split('/')[0];
+  const p = projectRace(a.st, a.rows, DATA.polling[`${office}/${a.st}`] || null);
+  state.projection = p;
+  const bits = [];
+  bits.push(el('div', { class: 'tiles', style: 'grid-template-columns:1fr 1fr' }, [
+    el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: 'Projected final' }),
+      el('div', { class: 'val', style: p ? `color:${marginColor(p.projected)}` : '', text: p ? marginLabel(p.projected) : '—' }),
+      el('div', { class: 'note', text: p
+        ? `likely ${marginLabel(p.lo)} to ${marginLabel(p.hi)}  (±${p.sigma.toFixed(1)})`
+        : 'needs counted votes in matched counties' }),
+    ]),
+    el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: 'Expected vote counted' }),
+      el('div', { class: 'val', text: p ? `${(p.R * 100).toFixed(0)}%` : '—' }),
+      el('div', { class: 'note', text: p
+        ? `${Math.round(p.countedTotal).toLocaleString()} of ~${Math.round(p.expectedTotal).toLocaleString()}`
+        : '—' }),
+    ]),
+  ]));
+
+  if (p) {
+    bits.push(el('div', { class: 'legend', style: 'margin-top:10px' }, [
+      el('span', {
+        title: p.anchor === 'poll'
+          ? 'The projection starts here at 0% counted and is displaced by real votes as they arrive.'
+          : 'No polling average loaded for this race, so the prior comes from the swing in counties that have reported.',
+        html: p.anchor === 'poll'
+          ? `anchored on <b>poll ${marginLabel(p.poll)}</b> (swing ${fmt(p.priorSwing)})`
+          : 'anchored on <b>returns</b> (no poll loaded)',
+      }),
+      el('span', { html: `2024 baseline <b>${marginLabel(p.stateBase)}</b>` }),
+      el('span', {
+        title: 'Turnout-weighted swing in the counties counted so far, taken at face value.',
+        html: `observed swing <b>${fmt(p.S)}</b>`,
+      }),
+      el('span', { html: `turnout vs 2024 <b>${(p.k * 100).toFixed(0)}%</b>${p.kRaw === null ? ' (assumed)' : ''}` }),
+      p.sdSwing === null ? null
+        : el('span', { html: `county swing spread <b>±${p.sdSwing.toFixed(1)}</b>` }),
+      el('span', { html: `<b>${p.countiesUsed}</b> of ${p.countiesTotal} counties informing the swing` }),
+    ]));
+
+    // Swing by partisan stratum - this is what makes the transfer non-uniform.
+    const tbl = el('table', { style: 'margin-top:10px' });
+    tbl.append(el('thead', {}, el('tr', {}, [
+      el('th', { class: 'l', text: '2024 lean' }), el('th', { text: 'Counties' }),
+      el('th', { text: 'Swing applied' }), el('th', { class: 'l', text: '' }),
+    ])));
+    const tb = el('tbody');
+    for (const s of p.strata) {
+      tb.append(el('tr', {}, [
+        el('td', { class: 'l', text: s.label }),
+        el('td', { text: String(s.n) }),
+        el('td', { class: 'cell-margin', style: `color:${marginColor(s.swing)}`, text: fmt(s.swing) }),
+        el('td', { class: 'l muted', text: s.pooled ? 'pooled to statewide' : '' }),
+      ]));
+    }
+    tbl.append(tb);
+    bits.push(tbl);
+
+    bits.push(el('div', { class: 'warnbox', style: 'margin-top:10px', html:
+      (p.anchor === 'poll'
+        ? `Before votes arrive this is the polling average, with a band of the assumed polling error `
+          + `(±${PROJ.pollSigma.toFixed(1)}); real votes displace it in proportion to how much is counted. `
+          + `<b>If the polls are badly wrong, so is this number early on.</b> `
+        : `No polling average is loaded, so the prior is the swing in counties that have already reported `
+          + `— itself read off partial returns, so the band starts wider (±${PROJ.returnsPriorSigma.toFixed(1)}). `)
+      + 'Counted margins are taken at face value: no attempt is made to guess whether an early lead is '
+      + 'real or just the order ballots were counted in. That risk sits in the band. The band is a '
+      + '<b>visual guide, not a confidence interval</b>.' }));
+  }
+  $('#countystats').replaceChildren(...bits);
+
+  // top-40 counties by weight, as a swing dot plot
+  const used = withVotes.slice(0, 40);
+  if (!used.length) { $('#countychart').replaceChildren(); return; }
+  const W = 760, pad = { l: 116, r: 52, t: 24, b: 16 };
+  const H = 20 * used.length + 40;
+  const max = Math.max(5, ...used.map(r => Math.abs(r.swing))) * 1.1;
+  const x = v => pad.l + ((v + max) / (2 * max)) * (W - pad.l - pad.r);
+  const parts = [];
+  const stepT = max > 18 ? 10 : max > 9 ? 5 : 2;
+  for (let v = -Math.floor(max / stepT) * stepT; v <= max; v += stepT) {
+    parts.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${x(v)}" x2="${x(v)}" y1="${pad.t - 7}" y2="${H - pad.b}"/>`);
+    parts.push(`<text x="${x(v)}" y="${pad.t - 12}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+  }
+  used.forEach((r, i) => {
+    const y = pad.t + i * 20;
+    parts.push(`<rect class="hitrow" data-i="${i}" x="0" y="${y - 9}" width="${W}" height="18" rx="3"/>`);
+    parts.push(`<text class="lbl" x="${pad.l - 10}" y="${y + 4}" text-anchor="end">${esc(r.name)}</text>`);
+    parts.push(`<line x1="${x(0)}" x2="${x(r.swing)}" y1="${y}" y2="${y}" stroke="${marginColor(r.swing)}" stroke-width="2"/>`);
+    parts.push(`<circle class="mark" cx="${x(r.swing)}" cy="${y}" r="4.5" fill="${marginColor(r.swing)}"/>`);
+  });
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="County swing versus 2024">${parts.join('')}</svg>` }).firstElementChild;
+  svg.querySelectorAll('.hitrow').forEach(n => {
+    n.addEventListener('mousemove', ev => {
+      const r = used[+n.dataset.i];
+      showTip(ev, `<b>${esc(r.name)}</b>
+        <div class="tr"><span>2024 margin</span><span>${marginLabel(r.base)}</span></div>
+        <div class="tr"><span>Now</span><span>${marginLabel(r.live)}</span></div>
+        <div class="tr"><span>Swing</span><span>${fmt(r.swing)} toward ${r.swing > 0 ? 'R' : 'D'}</span></div>
+        <div class="tr"><span>Counted</span><span>${r.reporting.toFixed(0)}% · ${r.votes.toLocaleString()} votes</span></div>`);
+    });
+    n.addEventListener('mouseleave', hideTip);
+  });
+  $('#countychart').replaceChildren(svg);
+
+  // table view (the accessibility fallback for the chart)
+  const table = $('#countytable');
+  table.tHead.replaceChildren(el('tr', {}, [
+    el('th', { class: 'l', text: 'County' }), el('th', { text: '2024' }),
+    el('th', { text: 'Now' }), el('th', { text: 'Swing' }),
+    el('th', { text: 'Counted' }), el('th', { text: 'Votes' }),
+  ]));
+  const body = el('tbody');
+  for (const r of withVotes) {
+    body.append(el('tr', {}, [
+      el('td', { class: 'l', text: r.name }),
+      marginCell(r.base), marginCell(r.live), marginCell(r.swing),
+      el('td', { text: `${r.reporting.toFixed(0)}%` }),
+      el('td', { text: r.votes.toLocaleString() }),
+    ]));
+  }
+  table.tBodies[0].replaceWith(body);
+}
+
+/* ============================================================
+   All-counties loader
+   ------------------------------------------------------------
+   region_results only comes from the per-race endpoint, so a national county
+   view costs one request per race. That is far too heavy for the 30s refresh
+   cycle, so it is loaded on demand and cached until reloaded.
+   ============================================================ */
+async function loadAllCounties() {
+  if (state.countiesLoading) return;
+  state.countiesLoading = true;
+  const races = DATA.senate2026;
+  const out = [];
+  let done = 0, failed = 0;
+  const btn = $('#loadcounties');
+  for (const r of races) {
+    btn.textContent = `Loading ${++done}/${races.length}…`;
+    try {
+      const race = await getJSON(`${API}/race/${r.raceId}`);
+      for (const row of countyAnalysis(`senate/${r.state}`, race.region_results).rows) {
+        if (row.live === null) continue;                 // nothing counted here yet
+        out.push({ ...row, state: r.state, stateName: r.stateName });
+      }
+    } catch { failed++; }
+    await new Promise(z => setTimeout(z, 90));           // their cache-control is max-age=15
+  }
+  state.allCounties = out;
+  state.countiesLoadedAt = new Date();
+  state.countiesFailed = failed;
+  state.countiesLoading = false;
+  btn.textContent = 'Reload counties';
+  renderScatter();
+}
+
+/* ============================================================
+   State multi-select for the scatter
+   ------------------------------------------------------------
+   state.scatterStates is null for "all" and a Set otherwise, so a fresh load
+   does not have to pre-select 35 boxes to mean "no filter".
+   ============================================================ */
+function syncStateFilter(all) {
+  const avail = [...new Set(all.map(c => c.state))].sort();
+  const list = $('#statelist');
+  if (state.filterBuiltFor === avail.join(',')) { updateStateBtn(avail); return; }
+  state.filterBuiltFor = avail.join(',');
+
+  list.replaceChildren(...avail.map(st => {
+    const on = !state.scatterStates || state.scatterStates.has(st);
+    const lab = el('label', { class: on ? '' : 'off' });
+    const box = el('input', { type: 'checkbox' });
+    box.checked = on;
+    box.addEventListener('change', () => {
+      const set = new Set(state.scatterStates || avail);
+      if (box.checked) set.add(st); else set.delete(st);
+      state.scatterStates = set.size === avail.length ? null : set;
+      lab.className = box.checked ? '' : 'off';
+      updateStateBtn(avail);
+      renderScatter();
+    });
+    lab.append(box, el('span', { text: `${st} — ${DATA.stateNames[st] || st}`.slice(0, 18) }));
+    return lab;
+  }));
+  updateStateBtn(avail);
+}
+
+function updateStateBtn(avail) {
+  const n = state.scatterStates ? state.scatterStates.size : avail.length;
+  $('#statebtn').textContent = (!state.scatterStates || n === avail.length)
+    ? `All states ▾` : `${n} state${n === 1 ? '' : 's'} ▾`;
+}
+
+function setStatePick(kind, avail) {
+  if (kind === 'all') state.scatterStates = null;
+  else if (kind === 'none') state.scatterStates = new Set();
+  else if (kind === 'comp') {
+    state.scatterStates = new Set(avail.filter(st => {
+      const m = DATA.trump2024ByState[st];
+      return Number.isFinite(m) && Math.abs(m) < 10;
+    }));
+  }
+  state.filterBuiltFor = null;            // force the checkbox list to rebuild
+  renderScatter();
+}
+
+/* ============================================================
+   County swing vs lean scatter
+   ============================================================ */
+function renderScatter() {
+  const zone = $('#scatterzone');
+  const min = Number($('#scattermin').value);
+  if (!state.allCounties) {
+    zone.replaceChildren(el('div', { class: 'warnbox', html:
+      'County detail is not loaded. <b>Load all counties</b> fetches one request per Senate race '
+      + `(${DATA.senate2026.length} in total), then caches the result — it is not part of the 30-second `
+      + 'refresh. Demo data fills this in without any requests.' }));
+    $('#scattercount').textContent = '';
+    return;
+  }
+  const all = state.allCounties;
+  const mode = $('#scatterbase').value;
+  const BASE_LABEL = mode === 'senate2020' ? 'previous Senate margin' : '2024 presidential margin';
+  syncStateFilter(all);
+  const picked = state.scatterStates;
+
+  // Re-derive the baseline and the swing against it. `c.base`/`c.swing` are always
+  // measured against 2024 president, so switching axis means recomputing, not relabelling.
+  // Track whole states with no 2020 race separately from the odd unmatched county
+  // (South Dakota's Oglala Lakota changed FIPS in 2015), so the note does not
+  // imply a whole state is absent when one county is.
+  const seenByState = new Map(), missByState = new Map(), uncontested = new Set();
+  const yearsUsed = new Map();
+  const pts = [];
+  for (const c of all) {
+    if (c.reporting < min) continue;
+    if (picked && !picked.has(c.state)) continue;
+    let base = c.base, baseYear = 2024;
+    if (mode === 'senate2020') {
+      seenByState.set(c.state, (seenByState.get(c.state) || 0) + 1);
+      const m = DATA.senatePrevByCounty[c.fips];
+      const info = DATA.senatePrevByState[c.state];
+      if (!Number.isFinite(m) || !info || !info.year) {
+        missByState.set(c.state, (missByState.get(c.state) || 0) + 1); continue;
+      }
+      base = m;
+      baseYear = info.year;
+      yearsUsed.set(c.state, info.year);
+    }
+    if (!Number.isFinite(base) || !Number.isFinite(c.live)) continue;
+    pts.push({ ...c, base, baseYear, swing: c.live - base });
+  }
+
+  $('#scattercount').textContent =
+    `· ${pts.length.toLocaleString()} of ${all.length.toLocaleString()} counties`
+    + (state.countiesLoadedAt ? ` · loaded ${state.countiesLoadedAt.toLocaleTimeString()}` : '');
+  const noRace = [...missByState.keys()].filter(st => missByState.get(st) === seenByState.get(st)).sort();
+  const strayCounties = [...missByState.entries()]
+    .filter(([st]) => !noRace.includes(st)).reduce((s, [, n]) => s + n, 0);
+
+  if (!pts.length) {
+    zone.replaceChildren(el('div', { class: 'warnbox', text:
+      noRace.length
+        ? `No 2020 Senate election was held in the selected states (${noRace.join(', ')}).`
+        : `No county is at ${min}% counted or better yet. Lower the threshold to see partial returns.` }));
+    return;
+  }
+
+  const W = 1000, H = 580;
+  const pad = { l: 64, r: 22, t: 20, b: 52 };
+  // Both axes are scaled to where the turnout actually is, with stragglers
+  // clamped to the edge, so one freak county cannot flatten the whole cloud.
+  const pctLim = (key, floor, round) => {
+    const sorted = [...pts].sort((a, b) => Math.abs(a[key]) - Math.abs(b[key]));
+    const total = sorted.reduce((s, p) => s + (p.baseV2 || 1), 0);
+    let acc = 0, cut = 0;
+    for (const p of sorted) { acc += p.baseV2 || 1; cut = Math.abs(p[key]); if (acc >= total * 0.99) break; }
+    return Math.max(floor, Math.ceil(cut / round) * round);
+  };
+  const xlim = pctLim('swing', 5, 5);
+  const clampX = (v) => Math.max(-xlim, Math.min(xlim, v));
+  // A few tiny counties sit near ±100 in 2024 and would stretch the axis until
+  // the bulk of the country is a flat smear. Scale to where the turnout is and
+  // clamp the stragglers to the edge instead.
+  const ylim = pctLim('base', 40, 10);
+  const clampY = (v) => Math.max(-ylim, Math.min(ylim, v));
+  const X = (v) => pad.l + ((v + xlim) / (2 * xlim)) * (W - pad.l - pad.r);
+  const Y = (v) => H - pad.b - ((v + ylim) / (2 * ylim)) * (H - pad.t - pad.b);
+  const maxV = Math.max(...pts.map(p => p.baseV2 || 1));
+  const rad = (p) => 2 + 7 * Math.sqrt((p.baseV2 || 1) / maxV);
+
+  const P = [];
+  const xs = xlim > 40 ? 20 : xlim > 20 ? 10 : 5;
+  for (let v = -Math.floor(xlim / xs) * xs; v <= xlim; v += xs) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+  }
+  const ys = ylim > 40 ? 20 : 10;
+  for (let v = -Math.floor(ylim / ys) * ys; v <= ylim; v += ys) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/>`);
+    P.push(`<text x="${pad.l - 9}" y="${Y(v) + 4}" text-anchor="end">${v === 0 ? 'EVEN' : (v > 0 ? 'R+' : 'D+') + Math.abs(v)}</text>`);
+  }
+  P.push(`<text x="${(pad.l + W - pad.r) / 2}" y="${H - 8}" text-anchor="middle" class="lbl">swing since ${mode === 'senate2020' ? 'the previous Senate race' : '2024'}  →  more Republican</text>`);
+  P.push(`<text transform="translate(16 ${(pad.t + H - pad.b) / 2}) rotate(-90)" text-anchor="middle" class="lbl">${BASE_LABEL}</text>`);
+
+  // Turnout-weighted fit of swing on 2024 margin: is the swing uniform, or
+  // bigger in some kinds of county than others?
+  let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of pts) {
+    const w = p.baseV2 || 1;
+    sw += w; sx += w * p.base; sy += w * p.swing;
+    sxx += w * p.base * p.base; sxy += w * p.base * p.swing;
+  }
+  const den = sw * sxx - sx * sx;
+  const slope = Math.abs(den) > 1e-9 ? (sw * sxy - sx * sy) / den : 0;
+  const intercept = (sy - slope * sx) / sw;
+  const fit = (b) => intercept + slope * b;
+
+  // points, largest first so small counties stay visible on top
+  for (const p of [...pts].sort((a, b) => (b.baseV2 || 0) - (a.baseV2 || 0))) {
+    P.push(`<circle cx="${X(clampX(p.swing))}" cy="${Y(clampY(p.base))}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.swing)}" opacity="0.55"/>`);
+  }
+  // Draw the fit only across the range counties actually occupy.
+  const yLo = clampY(Math.min(...pts.map(p => p.base)));
+  const yHi = clampY(Math.max(...pts.map(p => p.base)));
+  P.push(`<line x1="${X(clampX(fit(yLo)))}" y1="${Y(yLo)}" x2="${X(clampX(fit(yHi)))}" y2="${Y(yHi)}" stroke="var(--ink-1)" stroke-width="2" stroke-dasharray="6 4" opacity="0.85"/>`);
+  P.push(`<circle id="hl" r="9" fill="none" stroke="var(--ink-1)" stroke-width="2" opacity="0"/>`);
+
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="County swing versus 2024 margin">${P.join('')}</svg>` }).firstElementChild;
+
+  // One delegated handler finding the nearest point beats 2,000 listeners.
+  const hl = svg.querySelector('#hl');
+  svg.addEventListener('mousemove', (ev) => {
+    const box = svg.getBoundingClientRect();
+    const mx = ((ev.clientX - box.left) / box.width) * W;
+    const my = ((ev.clientY - box.top) / box.height) * H;
+    let best = null, bd = 1e9;
+    for (const p of pts) {
+      const dx = X(clampX(p.swing)) - mx, dy = Y(clampY(p.base)) - my;
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (!best || bd > 400) { hl.setAttribute('opacity', '0'); hideTip(); return; }
+    hl.setAttribute('cx', X(clampX(best.swing)));
+    hl.setAttribute('cy', Y(clampY(best.base)));
+    hl.setAttribute('opacity', '1');
+    showTip(ev, `<b>${esc(best.name)}, ${esc(best.state)}</b>
+      <div class="tr"><span>${mode === 'senate2020' ? best.baseYear + ' Senate' : '2024 margin'}</span><span>${marginLabel(best.base)}</span></div>
+      <div class="tr"><span>Now</span><span>${marginLabel(best.live)}</span></div>
+      <div class="tr"><span>Swing</span><span>${fmt(best.swing)} toward ${best.swing > 0 ? 'R' : 'D'}</span></div>
+      <div class="tr"><span>Counted</span><span>${best.reporting.toFixed(0)}% · ${best.votes.toLocaleString()} votes</span></div>`);
+  });
+  svg.addEventListener('mouseleave', () => { hl.setAttribute('opacity', '0'); hideTip(); });
+
+  let tw = 0, tn = 0;
+  for (const p of pts) { const w = p.baseV2 || 1; tw += w; tn += p.swing * w; }
+  const meanSwing = tn / tw;
+  const era = mode === 'senate2020' ? 'in its previous Senate race' : 'in 2024';
+  const trend = Math.abs(slope) < 0.015
+    ? 'close to uniform across the partisan spectrum'
+    : slope > 0
+      ? `${(slope * 10).toFixed(1)} pts more Republican for every 10 points redder a county was ${era}`
+      : `${(Math.abs(slope) * 10).toFixed(1)} pts more Democratic for every 10 points redder a county was ${era}`;
+
+  zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
+    el('span', { html: `turnout-weighted mean swing <b>${fmt(meanSwing)}</b>` }),
+    el('span', { html: `trend (dashed): <b>${trend}</b>` }),
+    el('span', { class: 'muted', text: 'dot size = 2024 turnout · colour = swing direction' }),
+    // Footnote the states not compared against 2020, so a mixed-year baseline is
+    // never passed off as a single one.
+    ...(mode === 'senate2020' ? (() => {
+      const odd = [...yearsUsed.entries()].filter(([, y]) => y !== 2020)
+        .sort((a, b) => a[0].localeCompare(b[0]));
+      const n2020 = [...yearsUsed.values()].filter(y => y === 2020).length;
+      return [
+        el('span', { class: 'muted',
+          title: '2020 is the Class 2 cycle, so for most of these seats it is literally the last time that seat was contested.',
+          html: `baseline: <b>2020</b> for ${n2020} state${n2020 === 1 ? '' : 's'}` }),
+        odd.length ? el('span', { class: 'muted',
+          title: 'Florida and Ohio have no Class 2 seat, so neither held a 2020 Senate election and their 2026 contests are specials; Arkansas’s 2020 race was uncontested. Each falls back to its most recent usable Senate election.',
+          html: `using most recent instead: <b>${odd.map(([s, y]) => `${s} ${y}`).join(', ')}</b>` }) : null,
+      ];
+    })() : []),
+    noRace.length ? el('span', { class: 'muted',
+      title: 'Alaska does not report results by county, so there is nothing to match against.',
+      text: `no county-level Senate result: ${noRace.join(', ')}` }) : null,
+    strayCounties ? el('span', { class: 'muted',
+      title: 'Counties whose FIPS code has no matching Senate row — chiefly South Dakota’s Oglala Lakota, renumbered in 2015.',
+      text: `${strayCounties} ${strayCounties === 1 ? 'county' : 'counties'} without a match` }) : null,
+    state.countiesFailed ? el('span', { class: 'muted', text: `${state.countiesFailed} race(s) failed to load` }) : null,
+  ]));
+}
+
+/* ============================================================
+   Coverage / diagnostics
+   ============================================================ */
+function renderCoverage(sen, house, gov) {
+  const noFeed = sen.filter(r => !r.res);
+  const houseFeed = house.filter(r => r.res).length;
+  const bits = [];
+  bits.push(el('div', { class: 'legend' }, [
+    el('span', { html: `Senate races with a live record: <b>${sen.length - noFeed.length}/${sen.length}</b>` }),
+    el('span', { html: `House watchlist districts with a live record: <b>${houseFeed}/${house.length}</b>` }),
+    el('span', { html: `Governor races published: <b>${gov.length}</b>` }),
+    el('span', { html: `Polling averages loaded: <b>${DATA.meta.counts.pollingRows}</b>` }),
+  ]));
+  if (noFeed.length) {
+    bits.push(el('div', { class: 'warnbox', style: 'margin-top:9px', html:
+      `No live record yet for: ${noFeed.map(r => esc(r.state)).join(', ')}.` }));
+  }
+  if (houseFeed === 0) {
+    bits.push(el('div', { class: 'warnbox', style: 'margin-top:9px', html:
+      'The upstream feed has not published 2026 House general records yet. House columns will stay blank until it does — the 2024 baselines below are already loaded.' }));
+  }
+  if (state.lastError) {
+    bits.push(el('div', { class: 'warnbox', style: 'margin-top:9px; border-left-color: var(--critical)', html:
+      `Last fetch failed: ${esc(state.lastError)}` }));
+  }
+  $('#coverage').replaceChildren(...bits);
+}
+
+function renderSources() {
+  const s = DATA.meta.sources;
+  const items = Object.entries(s).map(([k, v]) => el('div', { html: `<b>${esc(k)}</b> — ${esc(v)}` }));
+  items.push(el('div', { style: 'margin-top:8px', html:
+    `<b>Known gaps</b> — NY-21 has no published 2024 presidential totals in the source table.
+     civicAPI candidate metadata contains occasional name errors, so margins are computed from the
+     top two vote totals rather than from candidate labels.
+     ${DATA.meta.counts.warnings} build warnings were recorded in <code>build/warnings.txt</code>.` }));
+  $('#sources').replaceChildren(...items);
+}
+
+/* ============================================================
+   Tooltip
+   ============================================================ */
+const tip = $('#tip');
+function showTip(ev, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = '1';
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function hideTip() { tip.style.opacity = '0'; }
+
+/* ============================================================
+   Status line
+   ============================================================ */
+function setStatus(kind, text) {
+  const cls = kind === 'error' ? 'err' : kind === 'stale' ? 'stale' : 'live';
+  $('#statusline').innerHTML = `<span class="${cls}"><span class="dot"></span></span> ${esc(text)}`;
+}
+function statusText() {
+  if (state.lastError) return setStatus('error', `fetch failed — ${state.lastError}`);
+  if (!state.lastFetch) return setStatus('stale', 'no data yet');
+  const age = Math.round((Date.now() - state.lastFetch) / 1000);
+  setStatus(age > 180 ? 'stale' : 'live',
+    `updated ${state.lastFetch.toLocaleTimeString()} (${age}s ago) · ${state.live.size} live race records`);
+}
+
+/* ============================================================
+   Overrides
+   ============================================================ */
+function parseOverrides(text) {
+  const m = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim(); if (!t || t.startsWith('#')) continue;
+    const [key, margin, reporting] = t.split(',').map(s => (s ?? '').trim());
+    const v = Number(margin);
+    if (!key || !Number.isFinite(v)) continue;
+    m.set(key, { margin: v, reporting: Number.isFinite(Number(reporting)) ? Number(reporting) : 100 });
+  }
+  return m;
+}
+function loadOverrides() {
+  let raw = '';
+  try { raw = localStorage.getItem(OVERRIDE_KEY) || ''; } catch { /* private mode */ }
+  $('#overrides').value = raw;
+  state.overrides = parseOverrides(raw);
+}
+function saveOverrides() {
+  const raw = $('#overrides').value;
+  state.overrides = parseOverrides(raw);
+  try { localStorage.setItem(OVERRIDE_KEY, raw); } catch { /* ignore */ }
+  renderAll();
+}
+
+/* ============================================================
+   Demo data — for reviewing the board before any real votes exist.
+   Entirely synthetic and clearly banner-flagged. Toggling it off and
+   refreshing restores the live feed.
+   ============================================================ */
+function makeDemo() {
+  let s = 20261103;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  const gauss = () => (rnd() + rnd() + rnd() + rnd() - 2) * 1.6;
+  const NAT_SWING = -4.5;          // a modestly Democratic national environment
+
+  const polling = {}, live = new Map();
+  for (const r of DATA.senate2026) {
+    const base = Number.isFinite(r.trump2024) ? r.trump2024 : 0;
+    // A plausible polling average: 2024 baseline, national swing, incumbency-ish noise.
+    const poll = base + NAT_SWING + gauss() * 2.5;
+    polling[`senate/${r.state}`] = {
+      margin: +poll.toFixed(1), source: 'DEMO DATA — not a real poll', asOf: DATA.meta.electionDate,
+    };
+    // A "true" result that misses the poll, plus a count in progress.
+    const truth = poll + gauss() * 2.2 + 1.0;
+    const rep = Math.min(100, Math.max(0, 55 + gauss() * 38));
+    const observed = truth + (rep < 100 ? gauss() * 6 * (1 - rep / 100) : 0);
+    const total = 1_200_000 + rnd() * 2_000_000;
+    const counted = total * rep / 100;
+    const lead = counted * (1 + observed / 100) / 2;
+    const rc = r.candidates.find(c => c.party === 'Republican');
+    const dc = r.candidates.find(c => /Democratic/.test(c.party || ''))
+            || r.candidates.find(c => /Independent/.test(c.party || ''));
+    live.set(`senate/${r.state}`, {
+      margin: +observed.toFixed(2), reporting: +rep.toFixed(1), total: Math.round(counted),
+      twoSum: Math.round(counted),
+      candidates: [
+        { name: (rc && rc.name) || 'Republican', party: 'R', votes: Math.round(lead), pct: 0, winner: rep > 97 && observed > 0 },
+        { name: (dc && dc.name) || 'Democrat', party: 'D', votes: Math.round(counted - lead), pct: 0, winner: rep > 97 && observed < 0 },
+      ].sort((a, b) => b.votes - a.votes),
+      called: rep > 97, calledFor: observed > 0 ? 'R' : 'D',
+      raceId: r.raceId, source: 'demo',
+    });
+  }
+  // Synthetic county returns too, so the scatter can be reviewed with no requests.
+  // Each county gets the state's swing plus a lean-dependent tilt and noise, which
+  // is what gives the cloud a visible trend rather than a shapeless blob.
+  const counties = [];
+  for (const r of DATA.senate2026) {
+    const stateSwing = (polling[`senate/${r.state}`].margin) - (Number.isFinite(r.trump2024) ? r.trump2024 : 0);
+    for (const [fips, c] of Object.entries(DATA.counties)) {
+      if (c.st !== r.state) continue;
+      const rep = Math.min(100, Math.max(0, 60 + gauss() * 34));
+      if (rep < 1) continue;
+      const tilt = -0.06 * c.m;                       // redder counties swing slightly less D
+      const swing = stateSwing + tilt + gauss() * 2.4 + (rep < 100 ? gauss() * 4 * (1 - rep / 100) : 0);
+      const votes = Math.round((c.v2 || c.v || 0) * 0.72 * rep / 100);
+      if (votes <= 0) continue;
+      counties.push({
+        fips, name: c.n, state: r.state, stateName: r.stateName,
+        base: c.m, live: +(c.m + swing).toFixed(2), swing: +swing.toFixed(2),
+        reporting: +rep.toFixed(1), votes, counted2: votes, baseV2: c.v2 || c.v || 0,
+        weight: (c.v || 0) * rep / 100,
+      });
+    }
+  }
+  // Governor demo rows, so the Governor tab and its summary tile are reviewable.
+  // These are the 36 states the feed actually lists as holding a 2026 contest.
+  const GOV_STATES = ['AL','AK','AZ','AR','CA','CO','CT','FL','GA','HI','ID','IL','IA','KS','ME','MD','MA','MI','MN','NE','NV','NH','NM','NY','OH','OK','OR','PA','RI','SC','SD','TN','TX','VT','WI','WY'];
+  for (const st of GOV_STATES) {
+    const base = DATA.trump2024ByState[st];
+    if (!Number.isFinite(base)) continue;
+    const poll = base + NAT_SWING + gauss() * 3;
+    polling[`gov/${st}`] = {
+      margin: +poll.toFixed(1), source: 'DEMO DATA — not a real poll', asOf: DATA.meta.electionDate,
+    };
+    const truth = poll + gauss() * 2.2;
+    const rep = Math.min(100, Math.max(0, 55 + gauss() * 38));
+    const observed = truth + (rep < 100 ? gauss() * 6 * (1 - rep / 100) : 0);
+    const counted = (900000 + rnd() * 1800000) * rep / 100;
+    const lead = counted * (1 + observed / 100) / 2;
+    live.set(`gov/${st}`, {
+      margin: +observed.toFixed(2), reporting: +rep.toFixed(1),
+      total: Math.round(counted), twoSum: Math.round(counted),
+      candidates: [
+        { name: 'Republican', party: 'R', votes: Math.round(lead), pct: 0, winner: rep > 97 && observed > 0 },
+        { name: 'Democrat', party: 'D', votes: Math.round(counted - lead), pct: 0, winner: rep > 97 && observed < 0 },
+      ].sort((a, b) => b.votes - a.votes),
+      called: rep > 97, calledFor: observed > 0 ? 'R' : 'D', raceId: null, source: 'demo',
+    });
+  }
+
+  return { polling, live, counties };
+}
+
+function setDemo(on) {
+  state.demo = on;
+  if (on) {
+    if (!state.realPolling) state.realPolling = DATA.polling;
+    const d = makeDemo();
+    DATA.polling = d.polling;
+    DATA.meta.counts.pollingRows = Object.keys(d.polling).length;
+    state.live = d.live;
+    state.allCounties = d.counties;
+    state.countiesLoadedAt = new Date();
+    state.countiesFailed = 0;
+    $('#loadcounties').textContent = 'Reload counties';
+    state.lastFetch = new Date(); state.lastError = null;
+    if (timer) clearInterval(timer);        // stop the feed overwriting the demo
+  } else {
+    DATA.polling = state.realPolling || {};
+    DATA.meta.counts.pollingRows = Object.keys(DATA.polling).length;
+    state.live.clear();
+    state.allCounties = null;
+    state.countiesLoadedAt = null;
+    $('#loadcounties').textContent = 'Load all counties';
+    resetTimer();
+    refresh();
+  }
+  $('#demo').setAttribute('aria-pressed', String(on));
+  $('#demobanner').hidden = !on;
+  state.counties = null;
+  $('#countypanel').hidden = true;
+  renderAll();
+}
+
+/* ============================================================
+   Tabs
+   ============================================================ */
+const TAB_KEY = 'electionboard.tab.v1';
+
+function setTab(name) {
+  if (!document.querySelector(`[data-panel="${name}"]`)) name = 'summary';
+  state.tab = name;
+  for (const b of document.querySelectorAll('#tabs button'))
+    b.setAttribute('aria-selected', String(b.dataset.tab === name));
+  for (const p of document.querySelectorAll('[data-panel]'))
+    p.hidden = p.dataset.panel !== name;
+  // The county panel is shared by Senate and Governor, so a selection made on
+  // one tab should not linger when you move to another.
+  state.selected = null;
+  state.counties = null;
+  $('#countypanel').hidden = true;
+  try { localStorage.setItem(TAB_KEY, name); } catch { /* private mode */ }
+  renderAll();
+  // A tab switch is a jump to new content, so start at the top of it.
+  if (state.ready) window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+/** Counts on the tab labels, so the other tabs still say something while you are away from them. */
+function renderTabBadges(sen, house, gov) {
+  const called = sen.filter(r => r.res && r.res.called).length;
+  const set = (tab, text) => {
+    const b = document.querySelector(`#tabs button[data-tab="${tab}"] .badge`);
+    if (b) b.textContent = text;
+  };
+  set('senate', `${called}/${sen.length}`);
+  set('house', gov === undefined ? '' : String(house.length));
+  set('gov', gov.length ? String(gov.length) : '—');
+}
+
+/* ============================================================
+   Orchestration
+   ============================================================ */
+function renderAll() {
+  const sen = senateRows();
+  const house = houseRows();
+  const gov = govRows();
+  const threshold = Number($('#threshold').value);
+  const all = [...sen, ...gov, ...house];
+  const stats = errorStats(all, threshold);
+  renderTabBadges(sen, house, gov);
+  // Only draw the visible tab. The scatter alone can be a couple of thousand
+  // SVG nodes, and rebuilding it every 30 seconds while nobody is looking at it
+  // is pure waste.
+  const tab = state.tab || 'summary';
+  if (tab === 'summary') {
+    renderTiles(sen, stats);
+    renderErrorChart(all, stats);
+    renderCoverage(sen, house, gov);
+  } else if (tab === 'senate') {
+    renderSenateChart(sen);
+    renderSenate(sen);
+    renderScatter();
+  } else if (tab === 'house') {
+    renderHouse(house);
+  } else if (tab === 'gov') {
+    renderGovernor(gov);
+  }
+  statusText();
+}
+
+let timer = null;
+function resetTimer() {
+  if (timer) clearInterval(timer);
+  const ms = Number($('#interval').value);
+  if (ms > 0) timer = setInterval(refresh, ms);
+}
+
+/** Pin table headers just below the real page header, whatever its height. */
+function measureStick() {
+  const hdr = document.querySelector('header');
+  // When the header is not sticky (narrow screens), table headers should pin to
+  // the top of the viewport rather than to a gap where the header used to be.
+  const sticky = getComputedStyle(hdr).position === 'sticky';
+  const h = sticky ? Math.round(hdr.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--stick', h + 'px');
+}
+
+function init() {
+  measureStick();
+  addEventListener('resize', measureStick);
+  $('#eday').textContent = `· ${new Date(DATA.meta.electionDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`;
+  $('#builtat').textContent = `Baselines built ${new Date(DATA.meta.generated).toLocaleString()}.`;
+  renderSources();
+  loadOverrides();
+
+  $('#threshold').addEventListener('change', renderAll);
+  $('#interval').addEventListener('change', resetTimer);
+  $('#refresh').addEventListener('click', refresh);
+  $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
+  $('#demo').addEventListener('click', () => setDemo(!state.demo));
+  $('#loadcounties').addEventListener('click', () => {
+    if (state.demo) { renderScatter(); return; }   // demo already holds county data
+    loadAllCounties().catch(e => { state.countiesLoading = false; $('#loadcounties').textContent = `failed: ${e.message}`; });
+  });
+  $('#scattermin').addEventListener('change', renderScatter);
+  $('#scatterbase').addEventListener('change', renderScatter);
+  $('#statebtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const p = $('#statepanel');
+    p.hidden = !p.hidden;
+    $('#statebtn').setAttribute('aria-expanded', String(!p.hidden));
+  });
+  $('#statepanel').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const pick = e.target.closest('[data-pick]');
+    if (pick) setStatePick(pick.dataset.pick, [...new Set((state.allCounties || []).map(c => c.state))].sort());
+  });
+  document.addEventListener('click', () => {
+    const p = $('#statepanel');
+    if (!p.hidden) { p.hidden = true; $('#statebtn').setAttribute('aria-expanded', 'false'); }
+  });
+  $('#applyover').addEventListener('click', saveOverrides);
+  $('#clearover').addEventListener('click', () => { $('#overrides').value = ''; saveOverrides(); });
+  $('#theme').addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', cur === 'light' ? 'dark' : 'light');
+    if (state.counties) renderCounties();
+    renderAll();
+  });
+
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_KEY); } catch { /* private mode */ }
+  setTab(saved || 'summary');
+  state.ready = true;          // suppress the scroll-to-top on the very first paint
+
+  refresh();
+  resetTimer();
+  setInterval(statusText, 10000);
+}
+init();
+</script>
+</body>
+</html>

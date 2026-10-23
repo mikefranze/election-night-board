@@ -1,0 +1,9 @@
+# Polling averages - source-agnostic. Fill in and re-run scripts/build_data.mjs.
+# margin = Republican minus Democrat, in points. R+3 -> 3 ; D+3 -> -3
+# race_key: senate/<ST>  |  gov/<ST>  |  house/<ST>-<DD>  |  generic/national
+# source: free text, shown in the UI so you can see where each number came from.
+#
+# The projection anchors on these: at 0% reporting it reproduces the polling
+# average exactly, then converges to the count. Races with no row here fall back
+# to a returns-derived prior and are labelled "anchored on returns" in the panel.
+race_key,margin,source,as_of
