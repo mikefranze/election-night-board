@@ -131,14 +131,25 @@ running 80% of 2024" is itself a story.
 
 ## 2. Infrastructure
 
-### 2.1 Snapshot recorder — **M** — *highest leverage item in this document*
+### 2.1 Snapshot recorder — **M** — **Done**
 
 Append every fetched payload to disk with a timestamp. One mechanism unlocks:
 margin history and sparklines (3.1), a historical change feed (1.3), replay for
 rehearsal (0.4), and post-election analysis of how wrong the projections were
 and when.
 
-Build this before the night or the data is gone forever.
+Built in two halves, because a static page has no backend:
+
+- **`scripts/record.mjs`** — a standalone Node recorder that polls on an interval
+  and appends NDJSON to `data/snapshots/`. This is the durable half: it keeps
+  going whether or not a browser tab survives. ~3.2 KB per sweep, so about 4.6 MB
+  for a 12-hour night at 30s. `--counties` also records county breakdowns, which
+  is far heavier — use a 5-10 minute interval with it.
+- **In-page history** — one compact snapshot per successful sweep in IndexedDB,
+  falling back to memory where storage is blocked. Feeds sparklines (3.1) and the
+  change feed (1.3). Exportable from the diagnostics panel.
+
+Both write the **same NDJSON shape**, so a replay can read either.
 
 ### 2.2 Replay mode — **M** — depends on 2.1
 

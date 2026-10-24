@@ -9,6 +9,11 @@ data/raw_pres2024/
 # can rebuild index.html without re-downloading 50 MB of sources first.
 build/.poll.tmp.csv
 
+# Recorded sweeps from scripts/record.mjs. Machine-specific and they grow,
+# so they stay out of the repo. Commit a night's recording deliberately if
+# you want to keep it for analysis.
+data/snapshots/
+
 node_modules/
 .DS_Store
 Thumbs.db

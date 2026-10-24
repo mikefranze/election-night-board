@@ -280,6 +280,20 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       <button id="clearover">Clear</button></div>
   </details>
   <details>
+    <summary>Recorded history</summary>
+    <p class="sub" style="margin:8px 0 6px">
+      Every successful refresh is recorded so the board can show how a race moved, not only where it
+      stands. This is the browser's own copy and is lost if site data is cleared — for a durable archive
+      run <code>node scripts/record.mjs</code> alongside, which writes NDJSON to <code>data/snapshots/</code>
+      and keeps going if this tab does not.
+    </p>
+    <div id="historyzone" class="legend"></div>
+    <div style="margin-top:8px">
+      <button id="histexport">Export history</button>
+      <button id="histclear">Clear history</button>
+    </div>
+  </details>
+  <details>
     <summary>Data sources &amp; known gaps</summary>
     <div id="sources" class="sub" style="margin-top:8px"></div>
   </details>
@@ -639,6 +653,9 @@ async function refresh() {
       state.live = next;
       state.lastFetch = new Date();
       state.lastGood = new Date();
+      // Record only successful sweeps, so a failure cannot write a row of blanks
+      // that would later read as every race collapsing to zero.
+      if (!state.demo) await HISTORY.append(next).catch(() => {});
     }
     state.lastError = null;
   } catch (e) {
@@ -1059,6 +1076,116 @@ function govProjection(rows) {
   }
   return { D, R, live, total: D + R };
 }
+
+/* ============================================================
+   In-page snapshot history
+   ------------------------------------------------------------
+   Records one compact snapshot per successful sweep so the page can show how a
+   race has moved, not just where it stands. This is the browser's own copy and
+   dies with the tab — scripts/record.mjs keeps the durable archive.
+
+   IndexedDB where available, memory otherwise: storage is blocked outright on
+   some origins (a data: URL throws on access), so every path has to work
+   without it rather than taking the page down with it.
+   ============================================================ */
+const HISTORY = {
+  DB: 'electionboard', STORE: 'snapshots', VERSION: 1,
+  db: null, mem: [], persistent: false, MAX_MEM: 3000,
+
+  async open() {
+    if (this.db || typeof indexedDB === 'undefined') return;
+    try {
+      this.db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open(this.DB, this.VERSION);
+        req.onupgradeneeded = () => {
+          const d = req.result;
+          if (!d.objectStoreNames.contains(this.STORE)) d.createObjectStore(this.STORE, { keyPath: 't' });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+        setTimeout(() => reject(new Error('indexedDB open timed out')), 4000);
+      });
+      this.persistent = true;
+    } catch {
+      this.db = null; this.persistent = false;   // memory-only; the page still works
+    }
+  },
+
+  /** One row per sweep: { t, races: { key: [margin, reporting, called] } }. */
+  async append(live) {
+    const races = {};
+    for (const [key, r] of live) {
+      if (!Number.isFinite(r.margin) && !(r.reporting > 0)) continue;   // nothing to record yet
+      races[key] = [
+        Number.isFinite(r.margin) ? +r.margin.toFixed(2) : null,
+        +(r.reporting ?? 0).toFixed(1),
+        r.called ? 1 : 0,
+      ];
+    }
+    if (!Object.keys(races).length) return;
+    const row = { t: Date.now(), races };
+
+    this.mem.push(row);
+    if (this.mem.length > this.MAX_MEM) this.mem.shift();
+    if (!this.db) return;
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.STORE, 'readwrite');
+        tx.objectStore(this.STORE).put(row);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch { this.persistent = false; }
+  },
+
+  async all() {
+    if (!this.db) return [...this.mem];
+    try {
+      const rows = await new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.STORE, 'readonly');
+        const req = tx.objectStore(this.STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      return rows.sort((a, b) => a.t - b.t);
+    } catch { return [...this.mem]; }
+  },
+
+  /** Margin over time for one race, for sparklines and the change feed. */
+  async series(key) {
+    return (await this.all())
+      .map(row => ({ t: row.t, v: row.races[key] }))
+      .filter(p => p.v)
+      .map(p => ({ t: p.t, margin: p.v[0], reporting: p.v[1], called: !!p.v[2] }));
+  },
+
+  async count() { return (await this.all()).length; },
+
+  async clear() {
+    this.mem = [];
+    if (!this.db) return;
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.STORE, 'readwrite');
+        tx.objectStore(this.STORE).clear();
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch { /* memory already cleared */ }
+  },
+
+  /** Export in the same NDJSON shape scripts/record.mjs writes, so both replay alike. */
+  async exportNdjson() {
+    const rows = await this.all();
+    return rows.map(row => {
+      const races = {};
+      for (const [k, v] of Object.entries(row.races)) {
+        races[k] = { m: v[0], r: v[1], c: !!v[2] };
+      }
+      return JSON.stringify({ t: new Date(row.t).toISOString(), races });
+    }).join('\n') + '\n';
+  },
+};
 
 /* ============================================================
    Seat flips
@@ -2239,6 +2366,24 @@ function renderCoverage(sen, house, gov) {
   $('#coverage').replaceChildren(...bits);
 }
 
+async function renderHistory() {
+  const zone = $('#historyzone');
+  if (!zone) return;
+  const rows = await HISTORY.all();
+  const span = rows.length > 1 ? Math.round((rows[rows.length - 1].t - rows[0].t) / 60000) : 0;
+  zone.replaceChildren(
+    el('span', { html: `<b>${rows.length.toLocaleString()}</b> snapshot${rows.length === 1 ? '' : 's'}` }),
+    el('span', { html: span ? `spanning <b>${span < 90 ? span + 'm' : (span / 60).toFixed(1) + 'h'}</b>` : 'no span yet' }),
+    el('span', {
+      class: HISTORY.persistent ? '' : 'muted',
+      title: HISTORY.persistent
+        ? 'Stored in IndexedDB; survives a reload.'
+        : 'Storage is unavailable on this origin, so history is kept in memory only and is lost on reload.',
+      html: HISTORY.persistent ? 'stored in <b>IndexedDB</b>' : '<b>memory only</b> — storage blocked here',
+    }),
+  );
+}
+
 function renderSources() {
   const s = DATA.meta.sources;
   const items = Object.entries(s).map(([k, v]) => el('div', { html: `<b>${esc(k)}</b> — ${esc(v)}` }));
@@ -2492,6 +2637,7 @@ function renderAll() {
     renderFlips(sen);
     renderErrorChart(all, stats);
     renderCoverage(sen, house, gov);
+    renderHistory();
   } else if (tab === 'senate') {
     renderSenateChart(sen);
     renderSenate(sen);
@@ -2523,6 +2669,7 @@ function measureStick() {
 
 function init() {
   measureStick();
+  HISTORY.open().then(renderHistory);
   addEventListener('resize', measureStick);
   $('#eday').textContent = `· ${new Date(DATA.meta.electionDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`;
   $('#builtat').textContent = `Baselines built ${new Date(DATA.meta.generated).toLocaleString()}.`;
@@ -2538,6 +2685,17 @@ function init() {
     if (state.demo) { renderScatter(); return; }   // demo already holds county data
     loadAllCounties().catch(e => { state.countiesLoading = false; $('#loadcounties').textContent = `failed: ${e.message}`; });
   });
+  $('#histexport').addEventListener('click', async () => {
+    const text = await HISTORY.exportNdjson();
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const a = el('a', {
+      href: URL.createObjectURL(new Blob([text], { type: 'application/x-ndjson' })),
+      download: `election-history-${stamp}.ndjson`,
+    });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+  $('#histclear').addEventListener('click', async () => { await HISTORY.clear(); renderHistory(); });
   $('#scattermin').addEventListener('change', renderScatter);
   $('#scatterbase').addEventListener('change', renderScatter);
   $('#statebtn').addEventListener('click', (e) => {

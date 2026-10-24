@@ -82,6 +82,30 @@ node scripts/fetch_sources.mjs    # external datasets, ~50 MB, one time
 `build/data.json` *is* committed, so you can rebuild `index.html` without this
 step — you only need the sources to regenerate the baselines from scratch.
 
+## Recording the night
+
+Two recorders, because a static page has no backend:
+
+```bash
+node scripts/record.mjs                 # 60s interval, Ctrl-C to stop
+node scripts/record.mjs --interval 30
+node scripts/record.mjs --counties      # also county breakdowns; use 5-10 min
+```
+
+This writes one NDJSON line per sweep to `data/snapshots/YYYY-MM-DD.ndjson` and
+keeps going whether or not a browser tab survives — about **3.2 KB per sweep**,
+so roughly 4.6 MB for a 12-hour night at 30s.
+
+The page separately keeps its own history in IndexedDB, one snapshot per
+successful refresh, which is what margin sparklines and the change feed read.
+It falls back to memory where storage is blocked (some origins refuse it
+outright) and says which mode it is in. Both write the **same NDJSON shape**, so
+a replay can read either. Export or clear it under *Recorded history* in the
+feed-coverage panel.
+
+Only successful sweeps are recorded, so a failed fetch cannot write a row of
+blanks that would later read as every race collapsing to zero.
+
 ## Refreshing before election day
 
 ```bash
