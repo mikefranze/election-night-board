@@ -19,7 +19,7 @@ section matters if these slip.
 | 0.2 | **Re-run `fetch_index.mjs` every few days** to see whether House generals appear upstream | S, recurring | Ongoing |
 | 0.3 | **Rebuild and re-push after any data edit** | S | Process |
 | 0.4 | **Rehearse the night once, end to end** | M | Not started |
-| 0.5 | **Last-known-good cache + retry backoff in the page** | M | Not started |
+| 0.5 | **Last-known-good cache + retry backoff in the page** | M | **Done** |
 | 0.6 | **Publish to GitHub Pages and verify from a phone** | S | Not started |
 
 ### 0.1 Polling averages — the single highest-value item
@@ -60,7 +60,7 @@ fix what it finds.
 
 ## 1. Core features — build these next
 
-### 1.1 Seat flips on the Summary tab — **M**
+### 1.1 Seat flips on the Summary tab — **M** — **Done (Senate + House)**
 
 A flip is a race whose projected winner's party differs from the party that
 currently holds the seat. Add to Summary: a net-flip count per chamber and a
@@ -86,7 +86,7 @@ Flips should distinguish **called** from **projected**, because an early-night
 projected flip that later reverses is exactly the kind of thing a dashboard
 should not state confidently.
 
-### 1.2 Poll-closing countdown and waves — **S**
+### 1.2 Poll-closing countdown and waves — **S** — **Done, with a caveat**
 
 The feed already returns `polls_open` / `polls_close` per race and the board
 ignores them entirely. Verified they are real and per-state: GA 23:00Z, MA
@@ -95,6 +95,17 @@ ignores them entirely. Verified they are real and per-state: GA 23:00Z, MA
 Order races by closing time, show "closes in 12m", and group the night into
 waves. This is the cheapest high-value feature on the list and it is what
 actually paces an election night.
+
+
+**Caveat found while building this.** The feed's closing times look about an
+hour early for most states. US daylight time ends on 1 November 2026 and the
+election is the 3rd, so election day runs on standard time — yet Georgia is
+published as 23:00Z, which is 7pm Eastern only under EDT (under EST it would be
+00:00Z). Alaska is published at 05:00Z, which *is* right under standard time, so
+the feed is not internally consistent either. The displayed value is the feed's
+own, with a warning in the UI, and `POLL_TIME_OFFSET_MIN` in the template shifts
+every time at once — set it to 60 after checking a couple of states against an
+official schedule. Ordering and the closing "waves" are correct regardless.
 
 ### 1.3 "What changed" feed — **M**
 
@@ -134,7 +145,7 @@ Build this before the night or the data is gone forever.
 Feed recorded snapshots back through the UI at speed. The only honest way to
 test the projection model against a real counting curve.
 
-### 2.3 Last-known-good cache and backoff — **M** — *see 0.5*
+### 2.3 Last-known-good cache and backoff — **M** — **Done**
 
 `fetch_index.mjs` retries with backoff; the page's `getJSON` does not. civicAPI
 is an anonymous operator with no SLA and already returned a 503 once in October.

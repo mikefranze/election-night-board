@@ -233,6 +233,18 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
 <!-- ===== headline tiles ===== -->
 <section class="tiles" id="tiles"></section>
 
+<!-- ===== seat flips ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:6px">
+    <div>
+      <h2>Seats changing hands <span class="sub" id="flipcount"></span></h2>
+      <div class="sub">A flip is a race whose winner's party differs from the party holding the seat now.
+        Called races are separated from projections, which can still reverse.</div>
+    </div>
+  </div>
+  <div id="flipzone"></div>
+</section>
+
 <!-- ===== systemic polling error ===== -->
 <section class="panel">
   <div class="hrow" style="margin-bottom:10px">
@@ -294,6 +306,9 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
     <div>
       <h2>Senate <span class="sub" id="sencount"></span></h2>
       <div class="sub">Click a row to load its county-level swing. Swings are signed toward the Republican candidate.</div>
+      <div class="sub" style="color:var(--warning)" title="Daylight time ends 1 Nov 2026 but the feed's Georgia value matches an EDT computation, while Alaska's matches standard time. Set POLL_TIME_OFFSET_MIN once you have checked an official schedule.">
+        Closing times are the feed's own and look about an hour early for most states — verify before relying on them.
+      </div>
     </div>
     <div class="spacer"></div>
     <div class="legend">
@@ -473,6 +488,7 @@ const state = {
   sort: { sentable: { key: 'competitiveness', dir: 1 }, housetable: { key: 'competitiveness', dir: 1 } },
   selected: null,
   lastFetch: null,
+  lastGood: null,
   lastError: null,
   fetching: false,
   demo: false,
@@ -527,10 +543,24 @@ function marginFromRace(race) {
 /* ============================================================
    Fetching
    ============================================================ */
-async function getJSON(url) {
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
-  return r.json();
+/**
+ * Retries with backoff. civicAPI is an anonymous service with no SLA and has
+ * returned a 503 before; a transient blip should not blank the board.
+ */
+async function getJSON(url, tries = 3) {
+  let last;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (r.status === 429 || r.status >= 500) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      last = e;
+      if (i < tries) await new Promise(z => setTimeout(z, 700 * i * i));
+    }
+  }
+  throw new Error(`${last && last.message} for ${url}`);
 }
 
 /** One search sweep returns every Senate general with votes — far lighter than 35 race calls. */
@@ -599,11 +629,17 @@ async function refresh() {
       fetchHouse().catch(() => new Map()),
       fetchGovernor().catch(() => new Map()),
     ]);
-    state.live.clear();
+    // Build into a new map and only swap it in once the sweep succeeded, so a
+    // failure leaves the last good data on screen instead of emptying the board.
+    const next = new Map();
     for (const [k, race] of [...sen, ...house, ...gov]) {
-      state.live.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
+      next.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
     }
-    state.lastFetch = new Date();
+    if (next.size) {
+      state.live = next;
+      state.lastFetch = new Date();
+      state.lastGood = new Date();
+    }
     state.lastError = null;
   } catch (e) {
     state.lastError = e.message || String(e);
@@ -1025,6 +1061,124 @@ function govProjection(rows) {
 }
 
 /* ============================================================
+   Seat flips
+   ------------------------------------------------------------
+   A flip is a race whose winner's party differs from the party that currently
+   holds the seat. "Called" and "projected" are kept apart: an early projected
+   flip that later reverses is exactly what a board should not assert.
+
+   Governors are absent on purpose. There is no gubernatorial history in the
+   project and the feed leaves `incumbent` unset on every governor race, so the
+   current holder's party is simply not known from the data available.
+   ============================================================ */
+
+/**
+ * Which party wins, naming an independent as an independent. The projection is
+ * only a signed margin, so where live candidates exist the trailing/leading
+ * side is named from the candidate list — otherwise Nebraska's Osborn would be
+ * reported as a Democrat purely because the margin is negative.
+ */
+function winnerParty(row, proj) {
+  if (row.res && row.res.called && row.res.calledFor) return row.res.calledFor;
+  if (!proj || !Number.isFinite(proj.projected)) return null;
+  const cands = (row.res && row.res.candidates) || [];
+  if (cands.length >= 2) {
+    const rep = cands.find(c => c.party === 'R');
+    const other = cands.find(c => c.party !== 'R');
+    if (rep && other) return proj.projected > 0 ? 'R' : other.party;
+  }
+  return proj.projected > 0 ? 'R' : 'D';
+}
+
+function senateFlips(rows) {
+  const out = [];
+  for (const r of rows) {
+    const held = r.lastSenate && r.lastSenate.winnerParty;
+    if (!held) continue;
+    const proj = projectSimple(r);
+    const win = winnerParty(r, proj);
+    if (!win || win === held) continue;
+    out.push({
+      label: r.stateName, key: r.key, from: held, to: win,
+      called: !!(r.res && r.res.called),
+      margin: proj ? proj.projected : null,
+      reporting: r.reporting ?? 0,
+      note: `last held after ${r.lastSenate.year}${r.lastSenate.special ? ' special' : ''}${r.lastSenate.runoff ? ' runoff' : ''}`,
+    });
+  }
+  return out;
+}
+
+function houseFlips() {
+  const out = [];
+  for (const [dist, h] of Object.entries(DATA.house2024)) {
+    const held = h.winnerParty;
+    if (!held) continue;
+    const res = resultFor(`house/${dist}`);
+    if (!res || !Number.isFinite(res.margin)) continue;      // no live data, no flip claim
+    const poll = DATA.polling[`house/${dist}`];
+    const prior = poll ? poll.margin : h.margin;
+    const w = Math.min(Math.max(res.reporting ?? 0, 0), 100) / 100;
+    if (w <= 0) continue;
+    const projected = prior * (1 - w) + res.margin * w;
+    const win = winnerParty({ res }, { projected });
+    if (!win || win === held) continue;
+    out.push({
+      label: dist, key: `house/${dist}`, from: held, to: win,
+      called: !!res.called, margin: projected, reporting: res.reporting ?? 0,
+      note: `${h.winner} held it in 2024`,
+    });
+  }
+  return out;
+}
+
+/* ============================================================
+   Poll closing times
+   ============================================================ */
+/**
+ * Minutes to add to every published closing time.
+ *
+ * The feed's values look about an hour early for most states. US daylight time
+ * ends on 1 November 2026 and the election is the 3rd, so election day runs on
+ * standard time — yet Georgia is published as 23:00Z, which is 7pm Eastern only
+ * under EDT; under EST, 7pm Eastern is 00:00Z. Alaska, meanwhile, is published
+ * at 05:00Z, which *is* correct under standard time, so the feed is not even
+ * internally consistent.
+ *
+ * Left at 0 deliberately: shifting everything would mean overriding the source
+ * from recollection of each state's statutory closing time, and getting that
+ * wrong is worse than showing the source's own value. Set this to 60 once you
+ * have checked a couple of states against an official schedule. The relative
+ * ordering and the closing "waves" are unaffected either way.
+ */
+const POLL_TIME_OFFSET_MIN = 0;
+
+function pollClose(key) {
+  const t = DATA.pollTimes && DATA.pollTimes[key];
+  if (!t || !t.close) return null;
+  const d = new Date(t.close);
+  if (Number.isNaN(+d)) return null;
+  return POLL_TIME_OFFSET_MIN ? new Date(+d + POLL_TIME_OFFSET_MIN * 60000) : d;
+}
+
+/** "closes 7:00 PM" before the fact, "closed 2h ago" after. */
+function closeLabel(key, now = Date.now()) {
+  const d = pollClose(key);
+  if (!d) return null;
+  const mins = Math.round((+d - now) / 60000);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (mins > 0) {
+    const inText = mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.round(mins / 60)}h` : `${Math.round(mins / 1440)}d`;
+    return { text: `${time} · in ${inText}`, open: true, at: d, mins };
+  }
+  const ago = -mins;
+  return {
+    text: `${time} · ${ago < 60 ? ago + 'm' : ago < 1440 ? Math.round(ago / 60) + 'h' : Math.round(ago / 1440) + 'd'} ago`,
+    open: false, at: d, mins,
+  };
+}
+
+/* ============================================================
    Senate map: one row per race, sorted by projected margin
    ============================================================ */
 function renderSenateChart(rows) {
@@ -1235,6 +1389,26 @@ function renderTiles(rows, stats) {
       ? `${swings.length} races · toward ${meanSwing > 0 ? 'R' : 'D'}` : 'awaiting results' }),
   ]));
 
+  // Next poll closing — what actually paces the night.
+  const now = Date.now();
+  const upcoming = rows.map(r => ({ r, c: closeLabel(r.key, now) }))
+    .filter(x => x.c && x.c.open).sort((a, b) => a.c.mins - b.c.mins);
+  const closedCount = rows.filter(r => { const c = closeLabel(r.key, now); return c && !c.open; }).length;
+  if (upcoming.length || closedCount) {
+    const nextAt = upcoming.length ? upcoming[0].c.at : null;
+    const wave = nextAt ? upcoming.filter(x => +x.c.at === +nextAt) : [];
+    tiles.push(el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: upcoming.length ? 'Next polls close' : 'Polls closed' }),
+      el('div', { class: 'val', text: upcoming.length
+        ? nextAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : `${closedCount}/${rows.length}` }),
+      el('div', { class: 'note', text: upcoming.length
+        ? `in ${upcoming[0].c.text.split('in ')[1] || '—'} · ${wave.length} race${wave.length === 1 ? '' : 's'}: `
+          + wave.slice(0, 6).map(x => x.r.state).join(' ') + (wave.length > 6 ? ` +${wave.length - 6}` : '')
+        : 'every Senate poll has closed' }),
+    ]));
+  }
+
   tiles.push(el('div', { class: 'tile' }, [
     el('div', { class: 'label', text: 'Feed coverage' }),
     el('div', { class: 'val', text: `${reporting}/${rows.length}` }),
@@ -1242,6 +1416,66 @@ function renderTiles(rows, stats) {
   ]));
 
   const t = $('#tiles'); t.replaceChildren(...tiles);
+}
+
+/* ============================================================
+   Rendering — seat flips
+   ============================================================ */
+function renderFlips(sen) {
+  const zone = $('#flipzone');
+  const all = [...senateFlips(sen).map(f => ({ ...f, chamber: 'Senate' })),
+               ...houseFlips().map(f => ({ ...f, chamber: 'House' }))];
+  const net = all.reduce((n, f) => n + (f.to === 'D' ? 1 : f.to === 'R' ? -1 : 0), 0);
+  const called = all.filter(f => f.called).length;
+
+  $('#flipcount').textContent = all.length
+    ? `· ${all.length} (${called} called)`
+    : '· none yet';
+
+  if (!all.length) {
+    zone.replaceChildren(el('div', { class: 'warnbox', html:
+      'No seat is currently projected to change hands. Senate flips compare against the party that last '
+      + 'won each seat; House flips need live district results, which the feed has not published. '
+      + '<b>Governor flips are not shown at all</b> — the feed leaves <code>incumbent</code> unset on every '
+      + 'governor race and the project has no gubernatorial history, so the current holder is unknown.' }));
+    return;
+  }
+
+  const bits = [];
+  bits.push(el('div', { class: 'legend', style: 'margin-bottom:10px' }, [
+    el('span', { html: `net change <b style="color:${net === 0 ? 'var(--ink-1)' : net > 0 ? 'var(--dem)' : 'var(--rep)'}">`
+      + `${net === 0 ? 'even' : (net > 0 ? 'D +' : 'R +') + Math.abs(net)}</b>` }),
+    el('span', { html: `<b>${called}</b> called · <b>${all.length - called}</b> projected` }),
+  ]));
+
+  const table = el('table');
+  table.append(el('thead', {}, el('tr', {}, [
+    el('th', { class: 'l', text: 'Seat' }), el('th', { class: 'l', text: '' }),
+    el('th', { text: 'Change' }), el('th', { text: 'Margin' }),
+    el('th', { text: 'Counted' }), el('th', { class: 'l', text: 'Previously' }),
+  ])));
+  const body = el('tbody');
+  // Called flips first, then by how settled the race is.
+  all.sort((a, b) => (b.called ? 1 : 0) - (a.called ? 1 : 0) || (b.reporting - a.reporting));
+  for (const f of all) {
+    body.append(el('tr', {}, [
+      el('td', { class: 'l', text: f.label }),
+      el('td', { class: 'l' }, [el('span', { class: 'pill', text: f.chamber })]),
+      el('td', {}, [
+        el('span', { style: `color:${partyColor(f.from)}`, text: f.from }),
+        el('span', { class: 'muted', text: ' → ' }),
+        el('span', { style: `color:${partyColor(f.to)};font-weight:600`, text: f.to }),
+        f.called ? el('span', { class: 'pill called', text: 'called', style: 'margin-left:7px' })
+                 : el('span', { class: 'pill', text: 'projected', style: 'margin-left:7px' }),
+      ]),
+      marginCell(f.margin),
+      el('td', { text: `${(f.reporting ?? 0).toFixed(0)}%` }),
+      el('td', { class: 'l muted', text: f.note }),
+    ]));
+  }
+  table.append(body);
+  bits.push(el('div', { class: 'scroll' }, table));
+  zone.replaceChildren(...bits);
 }
 
 /* ============================================================
@@ -1364,6 +1598,7 @@ function renderSenate(rows) {
   const table = $('#sentable');
   const cols = [
     { label: 'State', key: 'stateName', l: true },
+    { label: 'Polls close', key: 'closeMins', numeric: true, title: 'Local closing time for this state' },
     { label: 'Leading', l: true, title: 'Top two candidates by votes' },
     { label: 'Margin', key: 'live', numeric: true, title: 'Current two-candidate margin' },
     { label: 'Counted', key: 'reporting', numeric: true },
@@ -1376,12 +1611,17 @@ function renderSenate(rows) {
   ];
   table.tHead.replaceChildren(headerRow(table, cols));
 
-  const enriched = rows.map(r => ({
-    ...r,
-    pollMargin: r.poll ? r.poll.margin : null,
-    lastMargin: r.lastSenate ? r.lastSenate.margin : null,
-    competitiveness: Number.isFinite(r.trump2024) ? Math.abs(r.trump2024) : 999,
-  }));
+  const nowTs = Date.now();
+  const enriched = rows.map(r => {
+    const c = closeLabel(r.key, nowTs);
+    return {
+      ...r,
+      pollMargin: r.poll ? r.poll.margin : null,
+      lastMargin: r.lastSenate ? r.lastSenate.margin : null,
+      competitiveness: Number.isFinite(r.trump2024) ? Math.abs(r.trump2024) : 999,
+      close: c, closeMins: c ? c.mins : null,
+    };
+  });
 
   const body = el('tbody');
   for (const r of sortRows(enriched, 'sentable')) {
@@ -1399,6 +1639,9 @@ function renderSenate(rows) {
         el('span', { text: r.stateName }),
         r.special ? el('span', { class: 'pill', text: 'special', style: 'margin-left:6px' }) : null,
       ]),
+      r.close
+        ? el('td', { class: r.close.open ? '' : 'muted', text: r.close.text })
+        : el('td', { class: 'muted', text: '—' }),
       lead,
       marginCell(r.live),
       reportingCell(r.reporting, r.res?.source),
@@ -2030,12 +2273,20 @@ function setStatus(kind, text) {
   $('#statusline').innerHTML = `<span class="${cls}"><span class="dot"></span></span> ${esc(text)}`;
 }
 function statusText() {
-  if (state.lastError) return setStatus('error', `fetch failed — ${state.lastError}`);
+  // On a failure, say how old the data still on screen is rather than implying
+  // there is none — the last good sweep is still being displayed.
+  if (state.lastError) {
+    const age = state.lastGood ? Math.round((Date.now() - state.lastGood) / 1000) : null;
+    return setStatus('error', age === null
+      ? `fetch failed — ${state.lastError}`
+      : `fetch failed — showing data from ${fmtAge(age)} ago · ${state.lastError}`);
+  }
   if (!state.lastFetch) return setStatus('stale', 'no data yet');
   const age = Math.round((Date.now() - state.lastFetch) / 1000);
   setStatus(age > 180 ? 'stale' : 'live',
-    `updated ${state.lastFetch.toLocaleTimeString()} (${age}s ago) · ${state.live.size} live race records`);
+    `updated ${state.lastFetch.toLocaleTimeString()} (${fmtAge(age)} ago) · ${state.live.size} live race records`);
 }
+const fmtAge = (s) => s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`;
 
 /* ============================================================
    Overrides
@@ -2238,6 +2489,7 @@ function renderAll() {
   const tab = state.tab || 'summary';
   if (tab === 'summary') {
     renderTiles(sen, stats);
+    renderFlips(sen);
     renderErrorChart(all, stats);
     renderCoverage(sen, house, gov);
   } else if (tab === 'senate') {

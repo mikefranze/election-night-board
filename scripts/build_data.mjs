@@ -210,6 +210,46 @@ senate2026.sort((a, b) => a.stateName.localeCompare(b.stateName));
 const nationalRollupId = idx.find(r => r.province === 'US'
   && String(r.election_date || '').startsWith('2026'))?.id ?? null;
 
+/* ---------- 5b. 2026 governor races + poll closing times ---------- */
+const gov2026 = [];
+{
+  const govPath = R('data/raw_civicapi/gov_generals.ndjson');
+  if (fs.existsSync(govPath)) {
+    const seen = new Set();
+    for (const line of fs.readFileSync(govPath, 'utf8').split('\n')) {
+      const t = line.trim(); if (!t) continue;
+      let races = [];
+      try { races = JSON.parse(t).races || []; } catch { continue; }
+      for (const r of races) {
+        if (!String(r.election_date || '').startsWith('2026')) continue;
+        if (!r.province || r.province === 'US' || seen.has(r.province)) continue;
+        if (!/^(Statewide|General)$/i.test(r.election_type || '')) continue;
+        seen.add(r.province);
+        gov2026.push({
+          raceId: r.id, state: r.province, stateName: STATES[r.province] || r.province,
+          trump2024: trump2024ByState[r.province] ?? null,
+        });
+      }
+    }
+    gov2026.sort((a, b) => a.stateName.localeCompare(b.stateName));
+  } else {
+    warn.push('governor index missing; run scripts/fetch_index.mjs');
+  }
+}
+
+// Poll closing times are only available from the per-race endpoint, so
+// fetch_index.mjs collects them and they are baked in here.
+let pollTimes = {};
+{
+  const ptPath = R('data/raw_civicapi/poll_times.json');
+  if (fs.existsSync(ptPath)) {
+    try { pollTimes = JSON.parse(fs.readFileSync(ptPath, 'utf8')); }
+    catch { warn.push('poll_times.json is unreadable'); }
+  } else {
+    warn.push('poll_times.json missing; run scripts/fetch_index.mjs for closing-time countdowns');
+  }
+}
+
 /* ---------- 6. House watchlist: data-driven, not hand-picked ---------- */
 const houseWatch = Object.keys(trump2024ByCd)
   .map(k => ({
@@ -271,12 +311,16 @@ const out = {
   senatePrevByCounty,
   senatePrevByState,
   senate2026,
+  gov2026,
+  pollTimes,
   houseWatch,
   house2024,
   polling,
 };
 out.meta.counts = {
   senateRaces: senate2026.length,
+  govRaces: gov2026.length,
+  pollTimes: Object.keys(pollTimes).length,
   counties: Object.keys(counties).length,
   cds: Object.keys(trump2024ByCd).length,
   houseDistrictsWith2024: Object.keys(house2024).length,

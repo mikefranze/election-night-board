@@ -38,13 +38,20 @@ async function sweep(type, file) {
   const enc = encodeURIComponent(type);
   const lines = [];
   let total = 0, y2026 = 0;
+  // Governor contests are published as "Statewide" while Senate generals are
+  // "General", so filtering governors on General upstream returns almost
+  // nothing. Fetch those unfiltered and screen by election_type instead.
+  const isGov = type === 'Governor';
+  const filter = isGov ? '' : '&election_type=General';
+  const keep = (r) => !isGov || /^(Statewide|General)$/i.test(r.election_type || '');
   for (let offset = 0; offset < 1400; offset += 200) {
-    const j = await getJSON(`${API}/race/search?country=US&type=${enc}&election_type=General&limit=200&offset=${offset}`);
-    const races = j.races || [];
+    const j = await getJSON(`${API}/race/search?country=US&type=${enc}${filter}&limit=200&offset=${offset}`);
+    const all = j.races || [];
+    const races = all.filter(keep);
     lines.push(JSON.stringify({ races }));
     total += races.length;
     y2026 += races.filter(r => String(r.election_date || '').startsWith('2026')).length;
-    if (races.length < 200) break;
+    if (all.length < 200) break;
     await sleep(250);         // be polite: their cache-control is max-age=15
   }
   fs.mkdirSync(OUT, { recursive: true });
@@ -55,6 +62,47 @@ async function sweep(type, file) {
 
 const counts = {};
 for (const [type, file] of TYPES) counts[type] = await sweep(type, file);
+
+/**
+ * Poll-closing times come only from the per-race endpoint, never from search,
+ * so they are collected here at build time rather than by the page. They do not
+ * change, so one pass per index refresh is plenty.
+ */
+async function collectPollTimes() {
+  const out = {};
+  const want = [];
+  for (const [type, file] of TYPES) {
+    const txt = fs.readFileSync(path.join(OUT, file), 'utf8');
+    for (const line of txt.split('\n')) {
+      const t = line.trim(); if (!t) continue;
+      let races = [];
+      try { races = JSON.parse(t).races || []; } catch { continue; }
+      for (const r of races) {
+        if (!String(r.election_date || '').startsWith('2026')) continue;
+        if (!r.province || r.province === 'US') continue;
+        if (type === 'Governor' && !/^(Statewide|General)$/i.test(r.election_type || '')) continue;
+        if (type !== 'Governor' && !/^General$/i.test(r.election_type || '')) continue;
+        const office = type === 'US Senate' ? 'senate' : type === 'Governor' ? 'gov' : 'house';
+        const key = office === 'house' ? `house/${r.district}` : `${office}/${r.province}`;
+        want.push({ key, id: r.id });
+      }
+    }
+  }
+  const seen = new Set();
+  let got = 0;
+  for (const w of want) {
+    if (seen.has(w.key)) continue;
+    seen.add(w.key);
+    try {
+      const d = await getJSON(`${API}/race/${w.id}`);
+      if (d.polls_close) { out[w.key] = { close: d.polls_close, open: d.polls_open || null }; got++; }
+    } catch { /* a missing close time just means no countdown for that race */ }
+    await sleep(80);
+  }
+  fs.writeFileSync(path.join(OUT, 'poll_times.json'), JSON.stringify(out, null, 1));
+  console.log(`\npoll closing times: ${got} of ${seen.size} races -> poll_times.json`);
+}
+await collectPollTimes();
 
 console.log('\n2026 general coverage upstream:');
 for (const [type, n] of Object.entries(counts)) {
