@@ -23,9 +23,10 @@ for (const r of presCounty) {
     continue;
   }
   const fips = String(r.county_fips).padStart(5, '0');
-  // v  = 2024 total turnout (all candidates), for display
-  // v2 = 2024 two-party votes, the denominator the projection scales turnout against
-  counties[fips] = { n: r.county_name, st: po, m: +twoParty(g, d).toFixed(2), v: t, v2: g + d };
+  // v2 = 2024 two-party votes: the denominator the projection scales turnout
+  // against, and the weight everything else uses. Total turnout was also stored
+  // here once and was redundant with it to within a percent or two.
+  counties[fips] = { n: r.county_name, st: po, m: +twoParty(g, d).toFixed(2), v2: g + d };
   const a = stateAgg.get(po) || { g: 0, d: 0, t: 0 };
   a.g += g; a.d += d; a.t += t;
   stateAgg.set(po, a);

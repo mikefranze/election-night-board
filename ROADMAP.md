@@ -15,7 +15,7 @@ section matters if these slip.
 
 | # | Task | Effort | Status |
 |---|---|---|---|
-| 0.1 | **Load polling averages** into `data/polling_averages.csv` | S once you have data | **Blocked on a purchase** |
+| 0.1 | **Load polling averages** into `data/polling_averages.csv` | S | **15 of 35 Senate races loaded** |
 | 0.2 | **Re-run `fetch_index.mjs` every few days** to see whether House generals appear upstream | S, recurring | Ongoing |
 | 0.3 | **Rebuild and re-push after any data edit** | S | Process |
 | 0.4 | **Rehearse the night once, end to end** | M | Not started |

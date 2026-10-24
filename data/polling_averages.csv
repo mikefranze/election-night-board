@@ -6,4 +6,24 @@
 # The projection anchors on these: at 0% reporting it reproduces the polling
 # average exactly, then converges to the count. Races with no row here fall back
 # to a returns-derived prior and are labelled "anchored on returns" in the panel.
+#
+# Margins below are Republican minus the leading non-Republican among the TOP TWO
+# polled candidates, matching how the board computes a live margin. Montana is a
+# three-way race and Nebraska has no Democrat, so both compare R against an
+# independent.
 race_key,margin,source,as_of
+senate/AK,-2.1,user-supplied 2026-10-23,2026-10-23
+senate/FL,5.8,user-supplied 2026-10-23,2026-10-23
+senate/GA,-8.4,user-supplied 2026-10-23,2026-10-23
+senate/IA,-0.2,user-supplied 2026-10-23,2026-10-23
+senate/KS,-1.2,user-supplied 2026-10-23,2026-10-23
+senate/ME,-1.7,user-supplied 2026-10-23,2026-10-23
+senate/MI,-2.8,user-supplied 2026-10-23,2026-10-23
+senate/MN,-3.8,user-supplied 2026-10-23,2026-10-23
+senate/MT,12.1,user-supplied 2026-10-23,2026-10-23
+senate/NE,0.9,user-supplied 2026-10-23,2026-10-23
+senate/NH,-6.9,user-supplied 2026-10-23,2026-10-23
+senate/NC,-10.6,user-supplied 2026-10-23,2026-10-23
+senate/OH,-4.1,user-supplied 2026-10-23,2026-10-23
+senate/SC,0.9,user-supplied 2026-10-23,2026-10-23
+senate/TX,-2.6,user-supplied 2026-10-23,2026-10-23

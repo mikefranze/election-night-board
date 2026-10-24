@@ -825,12 +825,12 @@ function countyAnalysis(raceKey, regions) {
     // electorate to whoever happened to report early.
     const hasVotes = m.margin !== null && m.twoSum > 0;
     const swing = hasVotes ? m.margin - base.m : null;
-    const weight = hasVotes ? (base.v || 0) * Math.max(rep, 1) / 100 : 0;
+    const weight = hasVotes ? (base.v2 || 0) * Math.max(rep, 1) / 100 : 0;
     rows.push({
       fips, name: base.n, base: base.m, live: hasVotes ? m.margin : null, swing,
       reporting: rep, votes: hasVotes ? m.total : 0, weight,
       counted2: hasVotes ? m.twoSum : 0,  // top-two votes counted so far
-      baseV2: base.v2 || base.v || 0,     // 2024 two-party votes, the turnout anchor
+      baseV2: base.v2 || 0,     // 2024 two-party votes, the turnout anchor
     });
     if (hasVotes) { wSwing += swing * weight; wSum += weight; }
   }
@@ -885,9 +885,19 @@ const PROJ = {
   minRepForSwing: 20,     // % reporting before a county's own swing is trusted at all
   minStratumCounties: 3,  // below this, a stratum falls back to the statewide swing
   floorSigma: 0.4,        // late provisional / cure drift
-  // How wrong the prior can be, in points of margin, before anything is counted.
+  // How wrong the prior can be, in points of MARGIN, before anything is counted.
   // Both are ASSUMPTIONS you can tune, not measured constants.
-  pollSigma: 5.0,         // with a polling average to anchor on
+  //
+  // 6.0 comes from the stated +/-3 on each candidate's share. The error on a
+  // margin is roughly twice the error on a single share, because the two shares
+  // move inversely — what one candidate gains the other tends to lose — so
+  // +/-3 per candidate implies about +/-6 on the gap between them.
+  //
+  // Worth knowing: this stands for TOTAL polling error, and sampling error is
+  // only part of that. Systematic error — the thing the polling-error panel
+  // exists to measure — has historically been the larger share, so 6.0 may be
+  // optimistic as a real-world figure even though it follows from +/-3 exactly.
+  pollSigma: 6.0,         // with a polling average to anchor on
   returnsPriorSigma: 8.0, // without one, inferring the swing from partial returns
   defaultTurnout: 0.70,   // midterm turnout vs 2024, before any county reports
 };
@@ -1208,13 +1218,30 @@ const HISTORY = {
 function winnerParty(row, proj) {
   if (row.res && row.res.called && row.res.calledFor) return row.res.calledFor;
   if (!proj || !Number.isFinite(proj.projected)) return null;
+  if (proj.projected > 0) return 'R';
+
+  // The projection only says "the non-Republican side leads"; naming that side
+  // takes more than the sign.
   const cands = (row.res && row.res.candidates) || [];
-  if (cands.length >= 2) {
-    const rep = cands.find(c => c.party === 'R');
-    const other = cands.find(c => c.party !== 'R');
-    if (rep && other) return proj.projected > 0 ? 'R' : other.party;
+  const counted = cands.reduce((s, c) => s + (c.votes || 0), 0);
+
+  // With votes in, the leading non-Republican by votes is the answer.
+  if (counted > 0) {
+    const other = [...cands].sort((a, b) => b.votes - a.votes).find(c => c.party !== 'R');
+    if (other) return other.party;
   }
-  return proj.projected > 0 ? 'R' : 'D';
+
+  // Before any votes, the candidate array is in arbitrary order, so "first
+  // non-Republican" can be a minor independent rather than the real opponent —
+  // which reported Minnesota as a D-to-I flip. Prefer a Democrat where one is on
+  // the ballot, and fall back to an independent only where none is (Nebraska).
+  const list = cands.length ? cands : ((DATA.senate2026.find(s => s.key === row.key
+    || `senate/${s.state}` === row.key) || {}).candidates || []);
+  const isDem = (p) => p === 'D' || /^Democratic/i.test(p || '');
+  const isInd = (p) => p === 'I' || /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '');
+  if (list.some(c => isDem(c.party))) return 'D';
+  if (list.some(c => isInd(c.party))) return 'I';
+  return 'D';
 }
 
 function senateFlips(rows) {
@@ -2512,13 +2539,13 @@ function makeDemo() {
       if (rep < 1) continue;
       const tilt = -0.06 * c.m;                       // redder counties swing slightly less D
       const swing = stateSwing + tilt + gauss() * 2.4 + (rep < 100 ? gauss() * 4 * (1 - rep / 100) : 0);
-      const votes = Math.round((c.v2 || c.v || 0) * 0.72 * rep / 100);
+      const votes = Math.round((c.v2 || 0) * 0.72 * rep / 100);
       if (votes <= 0) continue;
       counties.push({
         fips, name: c.n, state: r.state, stateName: r.stateName,
         base: c.m, live: +(c.m + swing).toFixed(2), swing: +swing.toFixed(2),
-        reporting: +rep.toFixed(1), votes, counted2: votes, baseV2: c.v2 || c.v || 0,
-        weight: (c.v || 0) * rep / 100,
+        reporting: +rep.toFixed(1), votes, counted2: votes, baseV2: c.v2 || 0,
+        weight: (c.v2 || 0) * rep / 100,
       });
     }
   }
