@@ -1401,12 +1401,75 @@ function closeLabel(key, now = Date.now()) {
    ============================================================ */
 const MC = { draws: 10000, systematic: 0.5 };
 
-/** Box-Muller. Returns one standard normal draw. */
+/**
+ * Box-Muller produces two independent normals per call; returning both halves
+ * the transcendental work, which is the bulk of the draw cost.
+ */
+/**
+ * Seeded PRNG (mulberry32), seeded from the inputs themselves.
+ *
+ * With Math.random the headline probability drifted about 1.4 points between
+ * identical runs, so it would wobble every refresh with nothing behind it.
+ * Seeding from the race margins means the number changes when the DATA changes
+ * and not otherwise — the jitter was sampling noise being reported as news.
+ */
+let _rngState = 1;
+function seedFrom(races, f) {
+  let h = 2166136261 ^ Math.round(f * 1000);
+  for (const r of races) {
+    h = Math.imul(h ^ Math.round((r.mu + 1000) * 100), 16777619);
+    h = Math.imul(h ^ Math.round(r.sigma * 100), 16777619);
+    h = Math.imul(h ^ (r.settled ? 7 : 3), 16777619);
+  }
+  _rngState = h >>> 0 || 1;
+  _spare = null;
+}
+function rnd() {
+  _rngState |= 0; _rngState = (_rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(_rngState ^ (_rngState >>> 15), 1 | _rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+/**
+ * Box-Muller produces two independent normals per call; returning both halves
+ * the transcendental work, which is the bulk of the draw cost.
+ */
+let _spare = null;
 function gauss() {
+  if (_spare !== null) { const s = _spare; _spare = null; return s; }
   let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  while (u === 0) u = rnd();
+  while (v === 0) v = rnd();
+  const r = Math.sqrt(-2 * Math.log(u)), th = 2 * Math.PI * v;
+  _spare = r * Math.sin(th);
+  return r * Math.cos(th);
+}
+
+/**
+ * Index of the k-th smallest value, by Hoare selection.
+ *
+ * The tipping point only needs one order statistic, not a sorted list. Sorting
+ * all 35 every draw — and allocating an array to do it — was about 70% of the
+ * simulation's runtime. `idx` is a caller-owned scratch buffer so the hot loop
+ * allocates nothing.
+ */
+function kthIndex(values, idx, n, k) {
+  for (let i = 0; i < n; i++) idx[i] = i;
+  let lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const pivot = values[idx[(lo + hi) >> 1]];
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (values[idx[i]] < pivot) i++;
+      while (values[idx[j]] > pivot) j--;
+      if (i <= j) { const t = idx[i]; idx[i] = idx[j]; idx[j] = t; i++; j--; }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else break;
+  }
+  return idx[k];
 }
 
 /** The party that wins this race if the Republican loses it. */
@@ -1448,6 +1511,7 @@ function simulateSenate(rows, opts = {}) {
     });
   }
   if (!races.length) return null;
+  seedFrom(races, f);
 
   const n = races.length;
   const seatCounts = new Map();          // D-bloc total -> times seen
@@ -1478,11 +1542,10 @@ function simulateSenate(rows, opts = {}) {
     }
     if (dTotal === 50) tied++;
 
-    // The decisive seat: sort by simulated margin, the Nth most Democratic race
-    // is the one that delivers the majority.
-    for (let i = 0; i < n; i++) order[i] = i;
-    const idx = Array.from(order).sort((a, b) => sim[a] - sim[b]);
-    const tipIdx = idx[Math.min(math.needed - 1, n - 1)];
+    // The decisive seat: ordering by simulated margin, the Nth most Democratic
+    // race is the one that delivers the majority. Only that one position is
+    // needed, so select it rather than sorting the whole field.
+    const tipIdx = kthIndex(sim, order, n, Math.min(math.needed - 1, n - 1));
     const tk = races[tipIdx].key;
     tipping.set(tk, (tipping.get(tk) || 0) + 1);
   }
