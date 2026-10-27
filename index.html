@@ -945,16 +945,23 @@ const PROJ = {
   // How wrong the prior can be, in points of MARGIN, before anything is counted.
   // Both are ASSUMPTIONS you can tune, not measured constants.
   //
-  // 6.0 comes from the stated +/-3 on each candidate's share. The error on a
-  // margin is roughly twice the error on a single share, because the two shares
-  // move inversely — what one candidate gains the other tends to lose — so
-  // +/-3 per candidate implies about +/-6 on the gap between them.
+  // 4.6 is the TOTAL error on a margin, which is what this term stands for —
+  // sampling error is only part of it.
   //
-  // Worth knowing: this stands for TOTAL polling error, and sampling error is
-  // only part of that. Systematic error — the thing the polling-error panel
-  // exists to measure — has historically been the larger share, so 6.0 may be
-  // optimistic as a real-world figure even though it follows from +/-3 exactly.
-  pollSigma: 6.0,         // with a polling average to anchor on
+  //   The stated +/-3 per candidate share is a 95% figure, so sigma per share is
+  //   3 / 1.96 = 1.53. Going from a share to a margin multiplies by ~1.93 (the
+  //   variance of a difference of two shares against that of one share, at
+  //   roughly 47/46), giving sigma ~2.96 on the margin FROM SAMPLING ALONE.
+  //
+  //   Measured total error is larger. Jennings & Wlezien put final-week error at
+  //   1.9 points mean absolute on share for legislative elections; since
+  //   MAE = sigma*sqrt(2/pi) for a normal, that is sigma ~2.38 per share, or
+  //   ~4.60 on the margin.
+  //
+  // The gap between the two is the systematic component: sqrt(4.60^2 - 2.96^2)
+  // = 3.52, which is 59% of the total variance. Worth noting against the Monte
+  // Carlo's systematic dial, which defaults to 50%.
+  pollSigma: 4.6,         // with a polling average to anchor on
   returnsPriorSigma: 8.0, // without one, inferring the swing from partial returns
   defaultTurnout: 0.70,   // midterm turnout vs 2024, before any county reports
 };

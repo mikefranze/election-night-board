@@ -309,7 +309,7 @@ Carried forward from the build. These are documented rather than fixed.
   unknown rather than guessed.
 - **Alaska has no county-level reporting** and is excluded from all county views.
 - **The projection band is not a calibrated interval.** It is a visual guide
-  built on tunable assumptions (`pollSigma` 5.0, `returnsPriorSigma` 8.0).
+  built on tunable assumptions (`pollSigma` 4.6, `returnsPriorSigma` 8.0).
 
 ---
 

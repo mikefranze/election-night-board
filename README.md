@@ -304,7 +304,7 @@ That is the right call here anyway: a polling miss hits every county in a state
 the same way, so it is systematic, not independent noise.
 
 `prior_sigma` is an **assumption you can tune** in `PROJ`, not a measured
-constant: `pollSigma` 5.0 with a polling average, `returnsPriorSigma` 8.0
+constant: `pollSigma` 4.6 with a polling average, `returnsPriorSigma` 8.0
 without one. The band is a visual guide, not a confidence interval.
 
 Behaviour is exact at both ends: at 0% counted the projection equals the polling
