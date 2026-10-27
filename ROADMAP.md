@@ -223,7 +223,7 @@ cheap to cut now.
 
 ## 4. Stretch goals
 
-### 4.1 Monte Carlo control probabilities — **L**
+### 4.1 Monte Carlo control probabilities — **L** — **Done**
 
 The board currently reports a point estimate ("D 46 – R 54") with no sense of
 how likely that is. Every input for a proper probability already exists: each
@@ -296,6 +296,12 @@ Carried forward from the build. These are documented rather than fixed.
 - **Independent caucus is assumed.** Osborn in Nebraska counts as
   not-Republican; who he would actually caucus with is not in the data, and in a
   50–50 Senate that is the whole ballgame.
+- **civicAPI publishes a rehearsal feed before election day.** Every 2026 race
+  carries `test_data: true`, and many are served fully counted with a declared
+  winner. The search endpoint — which the sweep uses — does **not** expose that
+  flag, so the board guards on the calendar instead: votes cannot exist before
+  election day. The gate lifts on 3 November. The **Test feed** button shows the
+  rehearsal data deliberately, behind a red banner.
 - **civicAPI candidate metadata has errors** (South Carolina lists "Darline
   Graham"). Margins are computed from vote totals, never names, but displayed
   names may be wrong.

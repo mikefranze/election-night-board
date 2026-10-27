@@ -207,6 +207,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       </select>
     </label>
     <button id="refresh">Refresh now</button>
+    <button id="testfeed" aria-pressed="false" title="Show civicAPI's pre-election rehearsal feed. These are not real results.">Test feed</button>
     <button id="demo" aria-pressed="false" title="Fill the board with synthetic results to review the layout">Demo data</button>
     <button id="theme" title="Toggle light / dark">◐</button>
   </div>
@@ -215,6 +216,12 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
     projections my own. Not a news organisation and not a race-calling operation.
   </div>
 </header>
+
+<div id="testbanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--critical)" hidden>
+  <b>Showing civicAPI's test feed.</b> Before election day the feed publishes rehearsal results —
+  races served fully counted, with declared winners, for an election that has not happened.
+  <b>Nothing below is a real vote count.</b> Click <b>Test feed</b> again to hide it.
+</div>
 
 <div id="demobanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--warning)" hidden>
   <b>Demo data is on.</b> Every result and polling average below is synthetic — generated in the browser
@@ -312,6 +319,24 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
     <div class="legend" id="chartlegend"></div>
   </div>
   <div id="senatechart"></div>
+</section>
+
+<!-- ===== monte carlo ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:6px">
+    <div>
+      <h2>Chance of control <span class="sub" id="mccount"></span></h2>
+      <div class="sub">Simulations of all 35 races drawn from each one's projected margin and its
+        uncertainty. Not a calibrated forecast — it inherits whatever assumptions the projections carry.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub" title="How much of the uncertainty is a single error shared by every race, rather than independent noise. Splits variance, so the total uncertainty per race is unchanged.">
+      Systematic share
+      <input id="mcsys" type="range" min="0" max="100" step="5" value="50" style="vertical-align:middle;width:120px">
+      <b id="mcsysval">50%</b>
+    </label>
+  </div>
+  <div id="mczone"></div>
 </section>
 
 <!-- ===== senate ===== -->
@@ -506,8 +531,10 @@ const state = {
   lastError: null,
   fetching: false,
   demo: false,
+  showTest: false,
   realPolling: null,
   projection: null,
+  sim: null,
   allCounties: null,
   countiesLoadedAt: null,
   countiesLoading: false,
@@ -668,12 +695,42 @@ async function refresh() {
 }
 
 /* ============================================================
+   Test-feed guard
+   ------------------------------------------------------------
+   civicAPI runs a rehearsal feed before election night: every 2026 race carries
+   test_data: true and many are served fully counted with a declared winner.
+   Shown unguarded, the board reports invented winners as called races.
+   The search endpoint — which is what the sweep uses — does NOT expose that
+   flag, and fetching every race to read it would cost 70+ requests per refresh.
+   So the guard is the calendar instead: votes cannot exist before election day.
+   On election day the gate lifts and the feed is taken at face value.
+   ============================================================ */
+const ELECTION_DAY_START = new Date(`${DATA.meta.electionDate}T00:00:00`);
+const beforeElectionDay = () => Date.now() < +ELECTION_DAY_START;
+/** A record holding votes before election day is the rehearsal feed, not a result. */
+const isTestRecord = (r) => beforeElectionDay() && !!r && (r.total > 0 || r.reporting > 0);
+
+const EMPTY_RESULT = { margin: null, reporting: 0, total: 0, twoSum: 0,
+  candidates: [], called: false, calledFor: null, source: 'suppressed', testData: true };
+
+/* ============================================================
    Merge of live feed + manual overrides
    ============================================================ */
 function resultFor(key) {
   const ov = state.overrides.get(key);
   if (ov) return { margin: ov.margin, reporting: ov.reporting, candidates: [], called: false, source: 'manual' };
-  return state.live.get(key) || null;
+  const r = state.live.get(key);
+  if (!r) return null;
+  // Suppressed rather than dropped, so coverage counts still see the race exists.
+  if (!state.showTest && isTestRecord(r)) return { ...EMPTY_RESULT, raceId: r.raceId };
+  return r;
+}
+
+/** How many live records are the rehearsal feed, for the banner and diagnostics. */
+function testRecordCount() {
+  let n = 0;
+  for (const [, r] of state.live) if (isTestRecord(r)) n++;
+  return n;
 }
 
 /* ============================================================
@@ -1333,6 +1390,138 @@ function closeLabel(key, now = Date.now()) {
 }
 
 /* ============================================================
+   Monte Carlo: chance of Senate control
+   ------------------------------------------------------------
+   Each race is drawn from its projected margin and uncertainty. The crucial
+   part is that the error is SPLIT, not independent: a share of it is one shock
+   applied to every race at once, because a polling miss is systematic — the
+   whole field tends to be wrong in the same direction. Drawing 35 independent
+   errors would imply those misses cancel out, and produce absurdly confident
+   probabilities.
+   ============================================================ */
+const MC = { draws: 10000, systematic: 0.5 };
+
+/** Box-Muller. Returns one standard normal draw. */
+function gauss() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/** The party that wins this race if the Republican loses it. */
+function nonRepParty(row) {
+  const cands = (row.res && row.res.candidates) || [];
+  const counted = cands.reduce((s, c) => s + (c.votes || 0), 0);
+  if (counted > 0) {
+    const other = [...cands].sort((a, b) => b.votes - a.votes).find(c => c.party !== 'R');
+    if (other) return other.party;
+  }
+  const list = cands.length ? cands
+    : ((DATA.senate2026.find(s => `senate/${s.state}` === row.key) || {}).candidates || []);
+  const isDem = (p) => p === 'D' || /^Democratic/i.test(p || '');
+  const isInd = (p) => p === 'I' || /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '');
+  if (list.some(c => isDem(c.party))) return 'D';
+  if (list.some(c => isInd(c.party))) return 'I';
+  return 'D';
+}
+
+function simulateSenate(rows, opts = {}) {
+  const draws = opts.draws ?? MC.draws;
+  // The dial splits VARIANCE, not standard deviation, so the total uncertainty
+  // of each race is the same whatever the split: sqrt(f)^2 + sqrt(1-f)^2 = 1.
+  const f = Math.min(Math.max(opts.systematic ?? MC.systematic, 0), 1);
+  const kSys = Math.sqrt(f), kIdio = Math.sqrt(1 - f);
+
+  const math = senateMath(rows);
+  const races = [];
+  for (const r of rows) {
+    const p = projectSimple(r);
+    if (!p) continue;
+    // A race already called is settled, not a coin flip.
+    const settled = !!(r.res && r.res.called && r.res.calledFor);
+    races.push({
+      key: r.key, state: r.state, stateName: r.stateName,
+      mu: p.projected, sigma: p.sigma,
+      nonRep: nonRepParty(r),
+      settled, calledFor: settled ? r.res.calledFor : null,
+    });
+  }
+  if (!races.length) return null;
+
+  const n = races.length;
+  const seatCounts = new Map();          // D-bloc total -> times seen
+  const tipping = new Map();             // race key -> times it was decisive
+  const sim = new Float64Array(n);
+  const order = new Int32Array(n);
+  let dMajority = 0, needsInd = 0, tied = 0;
+
+  for (let d = 0; d < draws; d++) {
+    const shock = gauss();
+    let nonRepWins = 0, indInBloc = 0;
+    for (let i = 0; i < n; i++) {
+      const r = races[i];
+      if (r.settled) {
+        sim[i] = r.calledFor === 'R' ? 1e6 : -1e6;   // pin a called race
+      } else {
+        sim[i] = r.mu + shock * r.sigma * kSys + gauss() * r.sigma * kIdio;
+      }
+      if (sim[i] < 0) { nonRepWins++; if (r.nonRep === 'I') indInBloc++; }
+    }
+    // Independents are counted into the Democratic bloc, which is an assumption
+    // the data cannot settle; track how often the majority depends on it.
+    const dTotal = math.holdovers + nonRepWins;
+    seatCounts.set(dTotal, (seatCounts.get(dTotal) || 0) + 1);
+    if (dTotal >= SENATE.majority) {
+      dMajority++;
+      if (indInBloc > 0 && dTotal - indInBloc < SENATE.majority) needsInd++;
+    }
+    if (dTotal === 50) tied++;
+
+    // The decisive seat: sort by simulated margin, the Nth most Democratic race
+    // is the one that delivers the majority.
+    for (let i = 0; i < n; i++) order[i] = i;
+    const idx = Array.from(order).sort((a, b) => sim[a] - sim[b]);
+    const tipIdx = idx[Math.min(math.needed - 1, n - 1)];
+    const tk = races[tipIdx].key;
+    tipping.set(tk, (tipping.get(tk) || 0) + 1);
+  }
+
+  const dist = [...seatCounts.entries()].map(([seats, count]) => ({ seats, count, p: count / draws }))
+    .sort((a, b) => a.seats - b.seats);
+  const tipList = [...tipping.entries()]
+    .map(([key, count]) => {
+      const r = races.find(x => x.key === key);
+      return { key, state: r ? r.stateName : key, p: count / draws };
+    })
+    .sort((a, b) => b.p - a.p);
+
+  return {
+    draws, systematic: f,
+    pDem: dMajority / draws,
+    pRep: 1 - dMajority / draws,
+    pTied: tied / draws,
+    pNeedsIndependent: needsInd / draws,
+    dist, tipping: tipList,
+    median: dist.length ? (() => {
+      let acc = 0;
+      for (const d2 of dist) { acc += d2.p; if (acc >= 0.5) return d2.seats; }
+      return dist[dist.length - 1].seats;
+    })() : null,
+    range80: (() => {
+      let acc = 0, lo = null, hi = null;
+      for (const d2 of dist) {
+        acc += d2.p;
+        if (lo === null && acc >= 0.1) lo = d2.seats;
+        if (hi === null && acc >= 0.9) hi = d2.seats;
+      }
+      return [lo, hi];
+    })(),
+    settledCount: races.filter(r => r.settled).length,
+  };
+}
+
+/* ============================================================
    Senate map: one row per race, sorted by projected margin
    ============================================================ */
 function renderSenateChart(rows) {
@@ -1473,6 +1662,23 @@ function renderTiles(rows, stats) {
       text: `${demMajority ? 'Democratic' : 'Republican'} majority · needs ${math.needed} of ${math.total} on the ballot` }),
   ]));
 
+  // Chance of control, from the same simulation the Senate tab shows.
+  const sim = simulateSenate(rows, { draws: 4000, systematic: MC.systematic });
+  if (sim) {
+    const favD = sim.pDem >= 0.5;
+    tiles.push(el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: 'Chance of Senate control' }),
+      el('div', { class: 'val', style: `color:${favD ? 'var(--dem)' : 'var(--rep)'}`,
+        text: `${favD ? 'D' : 'R'} ${((favD ? sim.pDem : sim.pRep) * 100).toFixed(0)}%` }),
+      el('div', { class: 'seatbar' }, [
+        el('span', { style: `flex:${Math.max(sim.pDem, 0.001)};background:var(--dem)` }),
+        el('span', { style: `flex:${Math.max(sim.pRep, 0.001)};background:var(--rep)` }),
+      ]),
+      el('div', { class: 'note',
+        text: `${sim.draws.toLocaleString()} sims · ${(MC.systematic * 100).toFixed(0)}% systematic error` }),
+    ]));
+  }
+
   // House
   const hp = houseProjection();
   const houseDem = hp.D >= hp.majority;
@@ -1570,6 +1776,119 @@ function renderTiles(rows, stats) {
   ]));
 
   const t = $('#tiles'); t.replaceChildren(...tiles);
+}
+
+/* ============================================================
+   Rendering — Monte Carlo
+   ============================================================ */
+function renderMonteCarlo(rows) {
+  const zone = $('#mczone');
+  const sim = simulateSenate(rows, { systematic: MC.systematic });
+  state.sim = sim;
+  if (!sim) { zone.replaceChildren(el('div', { class: 'warnbox', text: 'No race has a projection yet.' })); return; }
+
+  $('#mccount').textContent = `· ${sim.draws.toLocaleString()} simulations`;
+  const pct = (p) => (p * 100).toFixed(p >= 0.995 || p <= 0.005 ? 1 : 0) + '%';
+  const demFav = sim.pDem >= 0.5;
+
+  const bits = [];
+  bits.push(el('div', { class: 'tiles', style: 'grid-template-columns:repeat(auto-fit,minmax(190px,1fr))' }, [
+    el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: 'Democratic majority' }),
+      el('div', { class: 'val', style: `color:${demFav ? 'var(--dem)' : 'var(--ink-2)'}`, text: pct(sim.pDem) }),
+      el('div', { class: 'note', text: `Republican ${pct(sim.pRep)}` }),
+    ]),
+    el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: 'Most likely outcome' }),
+      el('div', { class: 'val', text: `D ${sim.median} – R ${100 - sim.median}` }),
+      el('div', { class: 'note', text: sim.range80[0] !== null
+        ? `80% of runs: D ${sim.range80[0]}–${sim.range80[1]}` : '' }),
+    ]),
+    el('div', { class: 'tile' }, [
+      el('div', { class: 'label', text: '50–50 split' }),
+      el('div', { class: 'val', text: pct(sim.pTied) }),
+      el('div', { class: 'note', text: 'Republicans hold a tie — the vice-president breaks it' }),
+    ]),
+  ]));
+
+  /* seat distribution */
+  const dist = sim.dist.filter(d => d.p > 0.0005);
+  if (dist.length) {
+    const W = 1000, H = 220, pad = { l: 40, r: 16, t: 14, b: 34 };
+    const lo = dist[0].seats, hi = dist[dist.length - 1].seats;
+    const maxP = Math.max(...dist.map(d => d.p));
+    const bw = (W - pad.l - pad.r) / (hi - lo + 1);
+    const X = (s) => pad.l + (s - lo) * bw;
+    const Y = (p) => H - pad.b - (p / maxP) * (H - pad.t - pad.b);
+    const P = [];
+    for (const d of dist) {
+      const dem = d.seats >= SENATE.majority;
+      P.push(`<rect class="mcbar" data-seats="${d.seats}" x="${X(d.seats) + 1}" y="${Y(d.p)}" `
+        + `width="${Math.max(bw - 2, 1)}" height="${H - pad.b - Y(d.p)}" rx="2" `
+        + `fill="${dem ? 'var(--dem)' : 'var(--rep)'}" opacity="0.85"/>`);
+    }
+    // majority line sits on the boundary between 50 and 51 seats
+    const mx = X(SENATE.majority);
+    P.push(`<line x1="${mx}" x2="${mx}" y1="${pad.t - 6}" y2="${H - pad.b}" stroke="var(--warning)" stroke-width="2" stroke-dasharray="6 4"/>`);
+    P.push(`<text x="${mx + 6}" y="${pad.t + 4}" fill="var(--warning)" font-weight="600">51 = majority</text>`);
+    for (let s = lo; s <= hi; s++) {
+      if ((s - lo) % Math.ceil((hi - lo) / 12 || 1)) continue;
+      P.push(`<text x="${X(s) + bw / 2}" y="${H - pad.b + 15}" text-anchor="middle">${s}</text>`);
+    }
+    P.push(`<text x="${(pad.l + W - pad.r) / 2}" y="${H - 4}" text-anchor="middle" class="lbl">Democratic bloc seats (including the 34 not on the ballot)</text>`);
+    const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribution of simulated Senate seat counts">${P.join('')}</svg>` }).firstElementChild;
+    svg.querySelectorAll('.mcbar').forEach(b => {
+      b.addEventListener('mousemove', ev => {
+        const s = +b.dataset.seats;
+        const d = dist.find(x => x.seats === s);
+        showTip(ev, `<b>D ${s} – R ${100 - s}</b>
+          <div class="tr"><span>Probability</span><span>${(d.p * 100).toFixed(1)}%</span></div>
+          <div class="tr muted"><span></span><span>${s >= SENATE.majority ? 'Democratic majority' : s === 50 ? 'tie, Republicans hold' : 'Republican majority'}</span></div>`);
+      });
+      b.addEventListener('mouseleave', hideTip);
+    });
+    bits.push(el('div', { style: 'margin-top:12px' }, svg));
+  }
+
+  /* tipping point */
+  const tip = sim.tipping.slice(0, 6);
+  if (tip.length) {
+    const t = el('table', { style: 'margin-top:10px' });
+    t.append(el('thead', {}, el('tr', {}, [
+      el('th', { class: 'l', text: 'Most likely decisive seat' }),
+      el('th', { text: 'Share of runs' }), el('th', { class: 'l', text: '' }),
+    ])));
+    const tb = el('tbody');
+    for (const x of tip) {
+      tb.append(el('tr', {}, [
+        el('td', { class: 'l', text: x.state }),
+        el('td', { text: (x.p * 100).toFixed(1) + '%' }),
+        el('td', { class: 'l' }, [el('span', { class: 'bar', style: 'width:150px;display:inline-block' },
+          [el('i', { style: `width:${Math.min(x.p * 100 * 2.2, 100)}%;background:var(--ink-muted)` })])]),
+      ]));
+    }
+    t.append(tb);
+    bits.push(el('div', { class: 'scroll' }, t));
+  }
+
+  const notes = [
+    el('span', { html: `systematic share <b>${(sim.systematic * 100).toFixed(0)}%</b> of variance` }),
+    sim.settledCount ? el('span', { html: `<b>${sim.settledCount}</b> called race(s) pinned` }) : null,
+    sim.pNeedsIndependent > 0.005 ? el('span', {
+      class: 'muted',
+      title: 'Independents are counted into the Democratic bloc. Who they would actually caucus with is not in the data.',
+      html: `<b>${pct(sim.pNeedsIndependent)}</b> of runs need an independent to caucus with Democrats`,
+    }) : null,
+  ];
+  bits.push(el('div', { class: 'legend', style: 'margin-top:10px' }, notes));
+  bits.push(el('div', { class: 'warnbox', style: 'margin-top:10px', html:
+    'At <b>0%</b> systematic every race errs independently, misses cancel, and the probabilities become '
+    + 'very confident — which is how a polling average that is wrong across the board gets mistaken for '
+    + 'near-certainty. At <b>100%</b> the whole map moves together and the result is close to asking '
+    + 'whether the polls are right at all. The default splits it evenly. These are probabilities derived '
+    + 'from assumptions in <code>PROJ</code>, not a calibrated forecast.' }));
+
+  zone.replaceChildren(...bits);
 }
 
 /* ============================================================
@@ -2667,6 +2986,7 @@ function renderAll() {
     renderHistory();
   } else if (tab === 'senate') {
     renderSenateChart(sen);
+    renderMonteCarlo(sen);
     renderSenate(sen);
     renderScatter();
   } else if (tab === 'house') {
@@ -2707,6 +3027,12 @@ function init() {
   $('#interval').addEventListener('change', resetTimer);
   $('#refresh').addEventListener('click', refresh);
   $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
+  $('#testfeed').addEventListener('click', () => {
+    state.showTest = !state.showTest;
+    $('#testfeed').setAttribute('aria-pressed', String(state.showTest));
+    $('#testbanner').hidden = !state.showTest;
+    renderAll();
+  });
   $('#demo').addEventListener('click', () => setDemo(!state.demo));
   $('#loadcounties').addEventListener('click', () => {
     if (state.demo) { renderScatter(); return; }   // demo already holds county data
@@ -2723,6 +3049,11 @@ function init() {
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
   $('#histclear').addEventListener('click', async () => { await HISTORY.clear(); renderHistory(); });
+  $('#mcsys').addEventListener('input', (e) => {
+    MC.systematic = Number(e.target.value) / 100;
+    $('#mcsysval').textContent = `${e.target.value}%`;
+    renderMonteCarlo(senateRows());
+  });
   $('#scattermin').addEventListener('change', renderScatter);
   $('#scatterbase').addEventListener('change', renderScatter);
   $('#statebtn').addEventListener('click', (e) => {
