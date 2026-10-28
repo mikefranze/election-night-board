@@ -15,7 +15,7 @@ section matters if these slip.
 
 | # | Task | Effort | Status |
 |---|---|---|---|
-| 0.1 | **Load polling averages** into `data/polling_averages.csv` | S | **15 of 35 Senate races loaded** |
+| 0.1 | **Load polling averages** into `data/polling_averages.csv` | S | **16 of 35 Senate, 18 of 36 Governor loaded** |
 | 0.2 | **Re-run `fetch_index.mjs` every few days** to see whether House generals appear upstream | S, recurring | Ongoing |
 | 0.3 | **Rebuild and re-push after any data edit** | S | Process |
 | 0.4 | **Rehearse the night once, end to end** | M | Not started |
@@ -24,10 +24,30 @@ section matters if these slip.
 
 ### 0.1 Polling averages — the single highest-value item
 
-Still **0 rows**. Until this file has numbers, every projection is anchored on
-the 2024 result rather than on current polling, the whole systemic-polling-error
-panel is dead, and the Senate map's error bars sit at their widest (±8 instead
-of ±5).
+**34 rows loaded** (2026-10-28): 16 Senate, 18 Governor, 0 House. Those races
+anchor on polling at ±4.6. The 19 Senate and 18 Governor races with no row fall
+back to the national-environment prior described below, at ±8.
+
+No House rows at all, so the House seat count remains a pure "if nothing
+changed" 2024 baseline — 220 R / 215 D — and is deliberately left untouched by
+the environment dial. It is a starting point, not a forecast, and should be read
+as one.
+
+**The no-poll prior.** Nobody polls a 30-point state, so half the board has no
+average. Those races used to anchor on their 2024 presidential margin with no
+adjustment, which, checked against the 16 Senate states that *do* have an
+average, ran **11.3 points too Republican** — bias, not noise, sitting inside a
+±8 band that assumed a centred prior. They now anchor on the 2024 margin
+re-centred on a generic-ballot environment (default **D+9**, adjustable live via
+the Environment dial beside the Monte Carlo). Against those same 16 states the
+adjusted rule gives MAE 5.8 / RMSE 6.6 at a bias of +0.8, and
+sqrt(6.6² + 4.6²) = 8.0 is exactly the ±8 already configured.
+
+It changes no projected winner in either office — it moves margins, bands and
+the shape of the Monte Carlo, not the headline. And D+9 cannot be validated from
+the polled states without arguing in a circle: the states worth polling are the
+states with a candidate story, so their swing overstates the national one. That
+is why it is a dial.
 
 The intended source is **FiftyPlusOne** (founded by FiveThirtyEight alumni). The
 catch: raw polls are Standard ($100/mo) but the **computed averages are Premium**

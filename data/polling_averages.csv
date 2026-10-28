@@ -2,28 +2,49 @@
 # margin = Republican minus Democrat, in points. R+3 -> 3 ; D+3 -> -3
 # race_key: senate/<ST>  |  gov/<ST>  |  house/<ST>-<DD>  |  generic/national
 # source: free text, shown in the UI so you can see where each number came from.
+# The polled shares are carried in `source` so every margin below can be audited
+# back to the two numbers it came from without re-reading the original table.
 #
 # The projection anchors on these: at 0% reporting it reproduces the polling
 # average exactly, then converges to the count. Races with no row here fall back
 # to a returns-derived prior and are labelled "anchored on returns" in the panel.
 #
 # Margins below are Republican minus the leading non-Republican among the TOP TWO
-# polled candidates, matching how the board computes a live margin. Montana is a
-# three-way race and Nebraska has no Democrat, so both compare R against an
-# independent.
+# polled candidates, matching how the board computes a live margin. Montana and
+# Maine-gov are three-way races, and Nebraska-sen has no Democrat, so those
+# compare R against whichever non-R polls highest.
 race_key,margin,source,as_of
-senate/AK,-2.1,user-supplied 2026-10-23,2026-10-23
-senate/FL,5.8,user-supplied 2026-10-23,2026-10-23
-senate/GA,-8.4,user-supplied 2026-10-23,2026-10-23
-senate/IA,-0.2,user-supplied 2026-10-23,2026-10-23
-senate/KS,-1.2,user-supplied 2026-10-23,2026-10-23
-senate/ME,-1.7,user-supplied 2026-10-23,2026-10-23
-senate/MI,-2.8,user-supplied 2026-10-23,2026-10-23
-senate/MN,-3.8,user-supplied 2026-10-23,2026-10-23
-senate/MT,12.1,user-supplied 2026-10-23,2026-10-23
-senate/NE,0.9,user-supplied 2026-10-23,2026-10-23
-senate/NH,-6.9,user-supplied 2026-10-23,2026-10-23
-senate/NC,-10.6,user-supplied 2026-10-23,2026-10-23
-senate/OH,-4.1,user-supplied 2026-10-23,2026-10-23
-senate/SC,0.9,user-supplied 2026-10-23,2026-10-23
-senate/TX,-2.6,user-supplied 2026-10-23,2026-10-23
+senate/AK,-2.0,poll avg; Sullivan 47.7 / Peltola 49.7,2026-10-28
+senate/FL,6.4,poll avg; Moody 49.9 / Nixon 43.5,2026-10-28
+senate/GA,-10.2,poll avg; Collins 42.4 / Ossoff 52.6,2026-10-28
+senate/IA,-0.6,poll avg; Hinson 45.5 / Turek 46.1,2026-10-28
+senate/KS,-0.2,poll avg; Marshall 45.7 / Hamilton 45.9,2026-10-28
+senate/ME,-3.0,poll avg; Collins 46.5 / Jackson 49.5,2026-10-28
+senate/MI,-3.2,poll avg; Rogers 45.2 / El-Sayed 48.4,2026-10-28
+senate/MN,-7.8,poll avg; Tafoya 41.9 / Flanagan 49.7,2026-10-28
+senate/MT,12.0,poll avg; Alme 42.4 / Bodnar 30.4 / Bankhead 16.8,2026-10-28
+senate/NE,0.3,poll avg; Ricketts 46.4 / Osborn (I) 46.1,2026-10-28
+senate/NH,-6.9,poll avg; Sununu 43.1 / Pappas 50.0,2026-10-28
+senate/NC,-9.7,poll avg; Whatley 41.9 / Cooper 51.6,2026-10-28
+senate/OH,-3.3,poll avg; Husted 44.7 / Brown 48.0,2026-10-28
+senate/SC,0.7,poll avg; Graham 45.4 / Andrews 44.7 (Nordone share missing),2026-10-28
+senate/SD,13.0,poll avg; Rounds 53.9 / Bengs 40.9,2026-10-28
+senate/TX,-2.8,poll avg; Paxton 46.2 / Talarico 49.0,2026-10-28
+gov/AZ,-8.0,poll avg; Biggs 41.6 / Hobbs 49.6,2026-10-28
+gov/CA,-21.9,poll avg; Hilton 36.1 / Becerra 58.0,2026-10-28
+gov/CT,-18.5,poll avg; Fazio 36.4 / Lamont 54.9,2026-10-28
+gov/FL,4.8,poll avg; Donalds 48.8 / Jolly 44.0,2026-10-28
+gov/GA,0.0,poll avg; Jackson 48.0 / Bottoms 48.0,2026-10-28
+gov/IA,-7.1,poll avg; Lahn 44.0 / Sand 51.1,2026-10-28
+gov/KS,3.2,poll avg; Masterson 48.2 / Holscher 45.0,2026-10-28
+gov/ME,-10.2,poll avg; Charles 39.4 / Pingree 49.6 / Bennett 7.1,2026-10-28
+gov/MI,-7.2,poll avg; James 42.7 / Benson 49.9,2026-10-28
+gov/MN,-12.3,poll avg; Demuth 39.5 / Klobuchar 51.8,2026-10-28
+gov/NE,3.5,poll avg; Pillen 44.2 / Walz 40.7,2026-10-28
+gov/NV,-0.9,poll avg; Lombardo 44.7 / Ford 45.6,2026-10-28
+gov/NH,9.7,poll avg; Ayotte 50.8 / Warmington 41.1,2026-10-28
+gov/NY,-13.3,poll avg; Blakeman 40.9 / Hochul 54.2,2026-10-28
+gov/OH,-3.0,poll avg; Ramaswamy 45.2 / Acton 48.2,2026-10-28
+gov/PA,-22.9,poll avg; Garrity 34.6 / Shapiro 57.5,2026-10-28
+gov/TX,2.7,poll avg; Abbott 49.5 / Hinojosa 46.8,2026-10-28
+gov/WI,-3.9,poll avg; Tiffany 43.3 / Crowley 47.2,2026-10-28

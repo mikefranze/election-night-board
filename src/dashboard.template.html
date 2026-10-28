@@ -335,6 +335,11 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       <input id="mcsys" type="range" min="0" max="100" step="5" value="50" style="vertical-align:middle;width:120px">
       <b id="mcsysval">50%</b>
     </label>
+    <label class="sub" title="The national environment, as a generic-ballot margin. Races with a polling average ignore this entirely. Races without one are anchored on their 2024 presidential margin re-centred on this number, because leaving 2024 unadjusted runs about 11 points too Republican against the states we can check. Move it to see how much of the board rests on the assumption.">
+      Environment
+      <input id="envgen" type="range" min="-20" max="10" step="0.5" value="-9" style="vertical-align:middle;width:120px">
+      <b id="envgenval">D+9</b>
+    </label>
   </div>
   <div id="mczone"></div>
 </section>
@@ -966,13 +971,46 @@ const PROJ = {
   defaultTurnout: 0.70,   // midterm turnout vs 2024, before any county reports
 };
 
+/* ------------------------------------------------------------------
+   National environment, for the races nobody polls
+   ------------------------------------------------------------------
+   19 of the 35 Senate races and 18 of the 36 governor races have no polling
+   average, because nobody polls a 30-point state. Their prior still has to come
+   from somewhere, and the 2024 result on its own is the wrong answer. Checked
+   against the 16 Senate states where a polling average DOES exist, an
+   unadjusted 2024 presidential baseline sits 11.3 points too Republican. That
+   is bias, not noise, and no width of error band repairs a mis-centred prior.
+
+   So the prior becomes the 2024 margin re-centred on the national environment,
+   taken as the generic-ballot margin. Against those same 16 states a D+9
+   environment gives MAE 5.8 / RMSE 6.6 with a bias of +0.8 — centred, where
+   the unadjusted version is not.
+
+   The residual is also what justifies returnsPriorSigma. A no-poll prior carries
+   this rule's own error plus the polling error of the number it stands in for:
+   sqrt(6.6^2 + 4.6^2) = 8.0, which is the 8.0 already configured. Worth knowing
+   that the 8.0 was only ever honest for a centred prior.
+
+   The caveat that keeps this a dial rather than a constant: the states that have
+   polls are the states worth polling, so their swing is a candidate-recruitment
+   story as much as a national one, and D+9 cannot be validated from them without
+   arguing in a circle. Move it and watch what moves. The House seat count
+   deliberately ignores this and stays an "if nothing changed" baseline.
+   ------------------------------------------------------------------ */
+const ENV = { generic2026: -9.0 };   // R-positive, so -9 means D+9
+
+// Points to take off a 2024 margin to re-centre it on the 2026 environment.
+const envShift = () => DATA.meta.trump2024National - ENV.generic2026;
+const envLabel = () => marginLabel(ENV.generic2026, 0);
+
 function projectRace(st, rows, poll) {
   const stateBase = DATA.trump2024ByState[st];
   const counted = rows.filter(r => r.counted2 > 0);
   if (!Number.isFinite(stateBase) || !rows.length) return null;
   // With a polling average there is a projection before a single vote is in:
-  // at 0% reporting it reproduces the poll exactly.
-  if (!counted.length && !poll) return null;
+  // at 0% reporting it reproduces the poll exactly. Without one the national
+  // environment stands in for the missing poll, so the panel still opens with a
+  // prior instead of going blank for every race nobody polled.
 
   /* --- 1. turnout scale: how big is this electorate vs 2024? --- */
   let tNum = 0, tDen = 0;
@@ -994,14 +1032,15 @@ function projectRace(st, rows, poll) {
     return d > 0 ? n / d : null;
   };
   const S = wmean(usable);
-  if (S === null && !poll) return null;
 
   // No early-count correction. A county that is behind on counting and a county
   // that genuinely moved look identical from here, and any rule that tells them
   // apart is really just an assumption about which counties count slowly. Guessing
   // wrong erases real movement, so the observed margin is taken at face value and
   // the uncertainty band carries the risk instead.
-  const Sobs = S ?? 0;
+  // Nothing measurable yet: fall back to the swing the national environment
+  // implies, not to zero. Zero would assert the country has not moved at all.
+  const Sobs = S ?? -envShift();
 
   const strata = new Map();
   for (const s of LEAN_STRATA) {
@@ -1070,7 +1109,7 @@ function projectRace(st, rows, poll) {
     R, k, kRaw, S: Sobs, sdSwing, stateBase, priorSigma,
     poll: poll ? poll.margin : null,
     priorSwing: poll ? poll.margin - stateBase : null,
-    anchor: poll ? 'poll' : 'returns',
+    anchor: poll ? 'poll' : (usable.length ? 'returns' : 'env'),
     strata: [...strata.values()],
     countiesUsed: usable.length, countiesCounted: counted.length, countiesTotal: rows.length,
     countedTotal, expectedTotal, detail,
@@ -1101,7 +1140,8 @@ function senateMath(rows) {
  */
 function projectSimple(row) {
   const poll = row.poll;
-  const prior = poll ? poll.margin : (Number.isFinite(row.trump2024) ? row.trump2024 : null);
+  const prior = poll ? poll.margin
+    : (Number.isFinite(row.trump2024) ? row.trump2024 - envShift() : null);
   if (prior === null && row.live === null) return null;
   const priorSigma = poll ? PROJ.pollSigma : PROJ.returnsPriorSigma;
   const r = Math.min(Math.max(row.reporting ?? 0, 0), 100) / 100;
@@ -1110,7 +1150,7 @@ function projectSimple(row) {
   const sigma = (prior === null ? 0 : priorSigma * (1 - r)) + PROJ.floorSigma;
   return {
     projected, sigma, lo: projected - sigma, hi: projected + sigma,
-    anchor: poll ? 'poll' : '2024', reporting: r * 100,
+    anchor: poll ? 'poll' : '2024+env', reporting: r * 100,
   };
 }
 
@@ -1679,7 +1719,7 @@ function renderSenateChart(rows) {
         <div class="tr"><span>Polling avg</span><span>${r.poll ? marginLabel(r.poll.margin) : '—'}</span></div>
         <div class="tr"><span>Trump 2024</span><span>${marginLabel(r.trump2024)}</span></div>
         <div class="tr"><span>Last Senate</span><span>${r.lastSenate ? marginLabel(r.lastSenate.margin) + " '" + String(r.lastSenate.year).slice(2) : '—'}</span></div>
-        <div class="tr muted"><span>anchored on</span><span>${p.anchor === 'poll' ? 'polling average' : '2024 result'}</span></div>`);
+        <div class="tr muted"><span>anchored on</span><span>${p.anchor === 'poll' ? 'polling average' : `2024 + ${envLabel()} env`}</span></div>`);
     });
     n.addEventListener('mouseleave', hideTip);
   });
@@ -2253,7 +2293,7 @@ function renderGovernor(rows) {
       reportingCell(r.reporting, r.res?.source),
       r.proj
         ? el('td', { class: 'cell-margin', style: `color:${marginColor(r.projected)}`,
-            title: `${marginLabel(r.proj.lo)} to ${marginLabel(r.proj.hi)} · anchored on ${r.proj.anchor === 'poll' ? 'the polling average' : 'the 2024 result'}`,
+            title: `${marginLabel(r.proj.lo)} to ${marginLabel(r.proj.hi)} · anchored on ${r.proj.anchor === 'poll' ? 'the polling average' : `the 2024 result re-centred on a ${envLabel()} environment`}`,
             text: `${marginLabel(r.projected)} ±${r.proj.sigma.toFixed(1)}` })
         : el('td', { class: 'muted', text: '—' }),
       r.poll ? marginCell(r.poll.margin) : el('td', { class: 'muted', text: '—' }),
@@ -2384,10 +2424,14 @@ function renderCounties() {
       el('span', {
         title: p.anchor === 'poll'
           ? 'The projection starts here at 0% counted and is displaced by real votes as they arrive.'
-          : 'No polling average loaded for this race, so the prior comes from the swing in counties that have reported.',
+          : p.anchor === 'env'
+            ? `No polling average and nothing counted, so the prior is each county's 2024 margin moved ${envShift().toFixed(1)} points toward the Democrats — the shift a ${envLabel()} national environment implies.`
+            : 'No polling average loaded for this race, so the prior comes from the swing in counties that have reported.',
         html: p.anchor === 'poll'
           ? `anchored on <b>poll ${marginLabel(p.poll)}</b> (swing ${fmt(p.priorSwing)})`
-          : 'anchored on <b>returns</b> (no poll loaded)',
+          : p.anchor === 'env'
+            ? `anchored on <b>2024 + ${envLabel()} environment</b> (no poll loaded)`
+            : 'anchored on <b>returns</b> (no poll loaded)',
       }),
       el('span', { html: `2024 baseline <b>${marginLabel(p.stateBase)}</b>` }),
       el('span', {
@@ -2423,6 +2467,13 @@ function renderCounties() {
         ? `Before votes arrive this is the polling average, with a band of the assumed polling error `
           + `(±${PROJ.pollSigma.toFixed(1)}); real votes displace it in proportion to how much is counted. `
           + `<b>If the polls are badly wrong, so is this number early on.</b> `
+        : p.anchor === 'env'
+        ? `No polling average is loaded and nothing is counted here yet, so the prior is this state's 2024 `
+          + `presidential margin moved ${envShift().toFixed(1)} points toward the Democrats — the shift implied `
+          + `by a ${envLabel()} national environment. Against the 16 Senate states that do have polling averages `
+          + `that adjustment comes out near-unbiased, where leaving 2024 alone runs about 11 points too `
+          + `Republican. <b>It is still an assumption about the country, not a measurement of this race</b> `
+          + `(±${PROJ.returnsPriorSigma.toFixed(1)}). `
         : `No polling average is loaded, so the prior is the swing in counties that have already reported `
           + `— itself read off partial returns, so the band starts wider (±${PROJ.returnsPriorSigma.toFixed(1)}). `)
       + 'Counted margins are taken at face value: no attempt is made to guess whether an early lead is '
@@ -3124,6 +3175,13 @@ function init() {
     $('#mcsysval').textContent = `${e.target.value}%`;
     renderMonteCarlo(senateRows());
   });
+  // Label on every drag frame, full re-render only on release: this one moves
+  // every projection on the board, so it is far too costly to run per frame.
+  $('#envgen').addEventListener('input', (e) => {
+    ENV.generic2026 = Number(e.target.value);
+    $('#envgenval').textContent = envLabel();
+  });
+  $('#envgen').addEventListener('change', () => renderAll());
   $('#scattermin').addEventListener('change', renderScatter);
   $('#scatterbase').addEventListener('change', renderScatter);
   $('#statebtn').addEventListener('click', (e) => {
