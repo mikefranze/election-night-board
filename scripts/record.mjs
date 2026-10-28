@@ -11,9 +11,13 @@
  *   node scripts/record.mjs --counties       # also record county breakdowns
  *
  * Output: data/snapshots/YYYY-MM-DD.ndjson, one line per sweep:
- *   {"t":"<iso>","races":{"senate/GA":{"m":-1.4,"r":62.1,"c":false,"v":123456}}}
+ *   {"t":"<iso>","td":true,"races":{"senate/GA":{"m":-1.4,"r":62.1,"c":false,"v":123456}}}
  *
  * m = margin (R-positive), r = percent reporting, c = called, v = votes counted.
+ * td = the feed's own test_data flag, probed once per sweep. The search endpoint
+ * does not carry it, only /race/{id} does, so one extra request per sweep buys
+ * the one field that tells a rehearsal apart from the real count. null means the
+ * probe failed, which is not the same as false.
  * Replay and post-mortem analysis both read this file.
  */
 import fs from 'node:fs';
@@ -27,7 +31,20 @@ const arg = (name, dflt) => {
   return i > -1 ? (process.argv[i + 1] ?? true) : dflt;
 };
 const INTERVAL = Math.max(15, Number(arg('interval', 60))) * 1000;
-const WITH_COUNTIES = process.argv.includes('--counties');
+// --counties forces county capture from the first sweep. Left off, the recorder
+// stays light while nothing is happening and turns counties on by itself when a
+// rehearsal starts. A rehearsal starts unattended, and a recorder that is
+// running but capturing the wrong granularity when one finally arrives fails the
+// same way a dead one does.
+//
+// "Any race with votes" is the wrong trigger: a couple of House generals are
+// already published and called, so that fires on the first sweep and never lets
+// go. The first sweep's races-with-votes become the baseline instead, and only
+// something NEW counts — a race outside it gaining votes, or the feed's own
+// test_data flag going true.
+const FORCE_COUNTIES = process.argv.includes('--counties');
+let withCounties = FORCE_COUNTIES;
+let baseline = null;             // Set of keys that already had votes at startup
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -104,9 +121,18 @@ async function snapshot() {
     raceId[k] = r.id;
   }
 
-  const line = { t: new Date().toISOString(), races };
+  // Is the feed in test mode? Uniform across races every time it has been
+  // checked, so one probe race answers it for the whole sweep.
+  let td = null;
+  const probeKey = Object.keys(raceId).find(k => k.startsWith('senate/'));
+  if (probeKey) {
+    try { td = !!(await getJSON(`${API}/race/${raceId[probeKey]}`)).test_data; }
+    catch { /* leave null: unknown, not false */ }
+  }
 
-  if (WITH_COUNTIES) {
+  const line = { t: new Date().toISOString(), td, races };
+
+  if (withCounties) {
     const counties = {};
     for (const key of Object.keys(races)) {
       if (!key.startsWith('senate/') && !key.startsWith('gov/')) continue;
@@ -136,7 +162,8 @@ async function snapshot() {
 
 fs.mkdirSync(OUT, { recursive: true });
 let n = 0;
-console.log(`recording every ${INTERVAL / 1000}s${WITH_COUNTIES ? ' (with counties)' : ''} -> ${OUT}`);
+console.log(`recording every ${INTERVAL / 1000}s${FORCE_COUNTIES ? ' (with counties)'
+  : ' (counties auto-enable when votes appear)'} -> ${OUT}`);
 console.log('Ctrl-C to stop.\n');
 
 for (;;) {
@@ -145,10 +172,26 @@ for (;;) {
     const line = await snapshot();
     const file = path.join(OUT, `${line.t.slice(0, 10)}.ndjson`);
     fs.appendFileSync(file, JSON.stringify(line) + '\n');
-    const counted = Object.values(line.races).filter(r => r.v > 0).length;
+    const voting = Object.keys(line.races).filter(k => line.races[k].v > 0);
+    const counted = voting.length;
+    if (baseline === null) {
+      baseline = new Set(voting);
+      if (counted) console.log(`${line.t.slice(11, 19)}  baseline: ${counted} race(s) already carrying votes `
+        + `(${voting.slice(0, 4).join(', ')}${counted > 4 ? ', …' : ''}) — ignored for escalation`);
+    } else if (!withCounties) {
+      const fresh = voting.filter(k => !baseline.has(k));
+      if (fresh.length || line.td === true) {
+        withCounties = true;
+        console.log(`${line.t.slice(11, 19)}  REHEARSAL DETECTED — `
+          + `${line.td === true ? 'feed flipped to test_data' : `new votes in ${fresh.slice(0, 5).join(', ')}`}`
+          + ` — county capture ON`);
+      }
+    }
     n++;
     console.log(`${line.t.slice(11, 19)}  sweep ${n}: ${Object.keys(line.races).length} races, `
-      + `${counted} with votes${line.counties ? `, ${Object.keys(line.counties).length} races w/ counties` : ''}`
+      + `${counted} with votes`
+      + `${line.td === null ? '' : line.td ? ' [TEST FEED]' : ''}`
+      + `${line.counties ? `, ${Object.keys(line.counties).length} races w/ counties` : ''}`
       + `  -> ${path.basename(file)}`);
   } catch (e) {
     // Never exit on a failed sweep; a gap in the record beats losing the recorder.
