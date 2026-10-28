@@ -183,11 +183,28 @@ Chart margins use the **state-level** form of the same blend
 `percent_reporting` the search endpoint already returns — so the chart costs no
 extra requests. The county-level version stays in the detail panel for whichever
 race is selected. With no polling average loaded, the prior falls back to the
-2024 presidential margin and the tooltip says "anchored on 2024 result".
+2024 presidential margin **re-centred on the national environment** — see
+*Races nobody polls*, below.
 
-Caveat: control is counted from the projected margin's sign, so a winning
-independent (Osborn in Nebraska, say) is counted as not-Republican. Who they
-would actually caucus with is not something the data can tell you.
+### Independents are counted with the Democrats
+
+Control is counted from the projected margin's sign, so any non-Republican win
+goes into the Democratic bloc: seat totals, the net flip count and the Monte
+Carlo all apply the same rule, and an R-to-I flip reads as a Democratic gain of
+one. Three races on this board have an independent as the leading
+non-Republican — **Nebraska** (Osborn), **Montana** (Bodnar) and **Idaho**,
+where no Democrat is on the ballot at all.
+
+This is an assumption and the data cannot settle it. Osborn has said he would
+caucus with neither party. So rather than bury it, the Monte Carlo reports the
+share of runs in which the majority actually *depends* on an independent
+joining; it appears beneath the chance-of-control tiles whenever it clears half
+a percent. If it is large on the night, read the seat total with that in mind.
+
+Which non-Republican is the real opponent cannot be read off the ballot: Montana
+has both a Democrat and an independent running, and it is the independent
+polling second. The `opponent` column in `data/polling_averages.csv` records it
+per race, and is consulted after any counted votes but ahead of guesswork.
 
 ## County swing vs lean
 

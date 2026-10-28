@@ -1126,6 +1126,19 @@ function projectRace(st, rows, poll) {
    tipping point — the "51st seat".
    ============================================================ */
 const SENATE = { currentD: 47, majority: 51 };
+
+/* Independents caucus with the Democrats.
+   Both sitting independents do, and SENATE.currentD already counts them. The
+   same rule now applies everywhere a seat is attributed: projected seat totals,
+   the net flip count and the Monte Carlo all put a non-Republican win into the
+   Democratic bloc.
+
+   It is an assumption, not a result. Nebraska's Osborn has said he would caucus
+   with neither party and Montana's Bodnar has no record to go on, so rather than
+   bury it the Monte Carlo reports how often the majority actually turns on it —
+   pNeedsIndependent, surfaced whenever it clears half a percent. */
+const CAUCUS = { I: 'D' };
+const caucusWith = (party) => CAUCUS[party] || party;
 function senateMath(rows) {
   const dSeatsUp = rows.filter(r => r.lastSenate && r.lastSenate.winnerParty === 'D').length;
   const holdovers = SENATE.currentD - dSeatsUp;
@@ -1323,36 +1336,9 @@ function winnerParty(row, proj) {
   if (row.res && row.res.called && row.res.calledFor) return row.res.calledFor;
   if (!proj || !Number.isFinite(proj.projected)) return null;
   if (proj.projected > 0) return 'R';
-
   // The projection only says "the non-Republican side leads"; naming that side
-  // takes more than the sign.
-  const cands = (row.res && row.res.candidates) || [];
-  const counted = cands.reduce((s, c) => s + (c.votes || 0), 0);
-
-  // With votes in, the leading non-Republican by votes is the answer.
-  if (counted > 0) {
-    const other = [...cands].sort((a, b) => b.votes - a.votes).find(c => c.party !== 'R');
-    if (other) return other.party;
-  }
-
-  // Before any votes, the polling average is the best evidence of who the real
-  // opponent is, so an explicit `opponent` from the CSV wins. Montana needs it:
-  // a Democrat and an independent are both on the ballot and the independent is
-  // the one polling second, so the ballot alone names the wrong party.
-  const hint = row.poll && row.poll.opponent;
-  if (hint === 'D' || hint === 'I' || hint === 'R') return hint;
-
-  // With no poll either, the candidate array is in arbitrary order, so "first
-  // non-Republican" can be a minor independent rather than the real opponent —
-  // which reported Minnesota as a D-to-I flip. Prefer a Democrat where one is on
-  // the ballot, and fall back to an independent only where none is (Nebraska).
-  const list = cands.length ? cands : ((DATA.senate2026.find(s => s.key === row.key
-    || `senate/${s.state}` === row.key) || {}).candidates || []);
-  const isDem = (p) => p === 'D' || /^Democratic/i.test(p || '');
-  const isInd = (p) => p === 'I' || /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '');
-  if (list.some(c => isDem(c.party))) return 'D';
-  if (list.some(c => isInd(c.party))) return 'I';
-  return 'D';
+  // takes more than the sign, and exactly one function does it.
+  return nonRepParty(row);
 }
 
 function senateFlips(rows) {
@@ -1527,15 +1513,35 @@ function kthIndex(values, idx, n, k) {
 }
 
 /** The party that wins this race if the Republican loses it. */
+/**
+ * Which party is the non-Republican side of a race — the side the projection
+ * means when the margin goes negative. The single source of truth for it:
+ * naming it in two places is how the Montana bug survived being fixed once.
+ */
 function nonRepParty(row) {
   const cands = (row.res && row.res.candidates) || [];
   const counted = cands.reduce((s, c) => s + (c.votes || 0), 0);
+
+  // With votes in, the leading non-Republican by votes is the answer.
   if (counted > 0) {
     const other = [...cands].sort((a, b) => b.votes - a.votes).find(c => c.party !== 'R');
     if (other) return other.party;
   }
+
+  // Before any votes the polling average is the best evidence of who the real
+  // opponent is, so an explicit `opponent` from the CSV wins. Montana needs it:
+  // a Democrat and an independent are both on the ballot and it is the
+  // independent polling second, so the ballot alone names the wrong party.
+  const hint = row.poll && row.poll.opponent;
+  if (hint === 'D' || hint === 'I' || hint === 'R') return hint;
+
+  // With no poll either, the candidate array is in arbitrary order, so "first
+  // non-Republican" can be a minor independent rather than the real opponent —
+  // which reported Minnesota as a D-to-I flip. Prefer a Democrat where one is on
+  // the ballot, and fall back to an independent only where none is (Nebraska).
   const list = cands.length ? cands
-    : ((DATA.senate2026.find(s => `senate/${s.state}` === row.key) || {}).candidates || []);
+    : ((DATA.senate2026.find(s => s.key === row.key
+       || `senate/${s.state}` === row.key) || {}).candidates || []);
   const isDem = (p) => p === 'D' || /^Democratic/i.test(p || '');
   const isInd = (p) => p === 'I' || /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '');
   if (list.some(c => isDem(c.party))) return 'D';
@@ -2015,7 +2021,13 @@ function renderFlips(sen) {
   const zone = $('#flipzone');
   const all = [...senateFlips(sen).map(f => ({ ...f, chamber: 'Senate' })),
                ...houseFlips().map(f => ({ ...f, chamber: 'House' }))];
-  const net = all.reduce((n, f) => n + (f.to === 'D' ? 1 : f.to === 'R' ? -1 : 0), 0);
+  // An R->I flip is a Democratic gain of one, because that is how the seat
+  // totals count it. Scoring it zero here while counting the seat as Democratic
+  // there is how the two numbers came to disagree.
+  const net = all.reduce((n, f) => {
+    const to = caucusWith(f.to), from = caucusWith(f.from);
+    return to === from ? n : n + (to === 'D' ? 1 : -1);
+  }, 0);
   const called = all.filter(f => f.called).length;
 
   $('#flipcount').textContent = all.length
@@ -2055,6 +2067,8 @@ function renderFlips(sen) {
         el('span', { style: `color:${partyColor(f.from)}`, text: f.from }),
         el('span', { class: 'muted', text: ' → ' }),
         el('span', { style: `color:${partyColor(f.to)};font-weight:600`, text: f.to }),
+        f.to === caucusWith(f.to) ? null
+          : el('span', { class: 'muted', text: ` (caucuses ${caucusWith(f.to)})` }),
         f.called ? el('span', { class: 'pill called', text: 'called', style: 'margin-left:7px' })
                  : el('span', { class: 'pill', text: 'projected', style: 'margin-left:7px' }),
       ]),
