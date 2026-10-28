@@ -95,7 +95,18 @@ section { margin-bottom: 22px; }
 .seatbar span { border-radius: 2px; }
 
 /* ---- tables ---- */
+/* .scroll lets a wide table scroll sideways on a narrow screen. The catch:
+   overflow-x:auto forces overflow-y from visible to AUTO, so this box becomes a
+   scroll container — and a sticky th then resolves against IT rather than the
+   viewport. top:var(--stick) was therefore pushing every column header --stick
+   pixels DOWN INTO its own table, floating it across the middle of the rows.
+
+   The widest table (Senate, 11 columns) needs 952px and .wrap is the viewport
+   less 32px of body padding, so past ~1024px nothing needs to scroll sideways.
+   Above the breakpoint, drop the scroll container entirely and the sticky th
+   resolves against the viewport again, pinning under the page header as meant. */
 .scroll { overflow-x: auto; }
+@media (min-width: 1100px) { .scroll { overflow-x: visible; } }
 table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 9px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
 th {
@@ -105,6 +116,10 @@ th {
   font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase;
   color: var(--ink-muted); font-weight: 600; cursor: pointer; user-select: none;
 }
+/* Below the breakpoint .scroll IS the scrollport, and it never scrolls
+   vertically, so 0 is the only offset that leaves the header where it belongs —
+   at the top of its own table. Any other value floats it over the rows. */
+@media (max-width: 1099.98px) { th { top: 0; } }
 th:hover { color: var(--ink-1); }
 th[aria-sort] { color: var(--ink-1); }
 td.l, th.l { text-align: left; }
