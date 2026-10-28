@@ -278,10 +278,15 @@ if (fs.existsSync(pollPath)) {
       const k = String(row.race_key || '').trim();
       const m = Number(row.margin);
       if (!k || !Number.isFinite(m)) continue;
+      // Party of the leading non-Republican. The margin's sign cannot convey
+      // this, and neither can the candidate list where a Democrat and an
+      // independent are both on the ballot (Montana).
+      const opp = String(row.opponent || '').trim().toUpperCase();
       polling[k] = {
         margin: m,
         source: String(row.source || '').trim() || 'unspecified',
         asOf: String(row.as_of || '').trim(),
+        opponent: /^[DIR]$/.test(opp) ? opp : null,
       };
     }
     fs.unlinkSync(tmp);

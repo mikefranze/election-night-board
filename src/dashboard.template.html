@@ -1335,7 +1335,14 @@ function winnerParty(row, proj) {
     if (other) return other.party;
   }
 
-  // Before any votes, the candidate array is in arbitrary order, so "first
+  // Before any votes, the polling average is the best evidence of who the real
+  // opponent is, so an explicit `opponent` from the CSV wins. Montana needs it:
+  // a Democrat and an independent are both on the ballot and the independent is
+  // the one polling second, so the ballot alone names the wrong party.
+  const hint = row.poll && row.poll.opponent;
+  if (hint === 'D' || hint === 'I' || hint === 'R') return hint;
+
+  // With no poll either, the candidate array is in arbitrary order, so "first
   // non-Republican" can be a minor independent rather than the real opponent —
   // which reported Minnesota as a D-to-I flip. Prefer a Democrat where one is on
   // the ballot, and fall back to an independent only where none is (Nebraska).
