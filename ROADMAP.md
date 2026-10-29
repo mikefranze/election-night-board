@@ -28,12 +28,34 @@ section matters if these slip.
 anchor on polling at ±4.6. The 19 Senate and 18 Governor races with no row fall
 back to the national-environment prior described below, at ±8.
 
-No House polling rows at all, so before any district reports the chamber count
-is a pure "if nothing changed" 2024 baseline — 220 R / 215 D — deliberately left
-untouched by the environment dial. It is a starting point, not a forecast. Live
-returns now land for all 435 districts, so it converges to the count as the
-night goes on; the 97-district watchlist drives the House *table*, while the
-seat total spans the full chamber.
+No House polling rows at all, so every district prior is its **2024 House result
+re-centred on the environment dial** — the same dial the Senate and Governor
+no-poll races use, but swung off the right baseline. House districts anchor on
+the 2024 national *House* vote (**R+3.31**, measured in `build_data.mjs` from the
+same MEDSL rows that produce each district margin), not the presidential R+1.5;
+using the presidential figure would have left every district 1.81 points too
+Republican. At the D+9 default the chamber projects **D 244 / R 191**.
+
+Two properties keep it honest. Parking the dial at R+3.31 — a zero shift —
+reproduces the real 2024 chamber, 220 R / 215 D, which is the regression test.
+And the anchor and the dial are interchangeable: disagreeing with R+3.31 by a
+point is identical to moving the dial a point, so the anchor choice is not
+load-bearing.
+
+It is a **uniform-swing** model and should be read as one. It moves all 435
+districts by the same number of points and knows nothing about retirements,
+candidate quality or redistricting. It is also sensitive near the middle: the
+median district sat at R+1.01 while the national vote was R+3.31, so the chamber
+changes hands at about R+2.3 on the dial rather than at even. The 22 districts
+uncontested in 2024 carry meaningless margins but sit far enough from even that
+no dial setting flips them.
+
+Live returns land for all 435 districts and the count converges to them as the
+night goes on. The 97-district watchlist drives the House *table*; the seat
+total spans the full chamber. **Flips are still only claimed where a district
+has actually reported** — a dial setting is an assumption, not a seat changing
+hands — but the flip list blends from the same shifted prior, so the two never
+disagree about the same district.
 
 **The no-poll prior.** Nobody polls a 30-point state, so half the board has no
 average. Those races used to anchor on their 2024 presidential margin with no

@@ -169,6 +169,32 @@ for (const r of houseRows) {
   if (!byDist.has(k)) byDist.set(k, []);
   byDist.get(k).push(r);
 }
+/**
+ * The 2024 national House two-party vote, measured from the same rows that
+ * produce the district margins below.
+ *
+ * This is the anchor the environment dial swings off for House districts, and
+ * it is NOT the presidential figure. Trump 2024 was R+1.5 nationally while the
+ * House vote was R+3.31, so re-using trump2024National here would leave every
+ * district 1.81 points too Republican - the same class of bias the Senate
+ * no-poll prior carried before it was re-centred.
+ *
+ * Contested districts alone give R+2.5; the 22 uncontested or effectively
+ * uncontested districts (13 R, 9 D, collectively R+20.8) pull the full figure
+ * about 0.8 points right. The full figure is used because it is the
+ * conventional "2024 national House vote" and is measured over exactly the rows
+ * that produce each district margin. The choice is not load-bearing: the anchor
+ * and the dial are interchangeable, so disagreeing by a point here is identical
+ * to moving the dial by a point.
+ */
+let houseNatD = 0, houseNatR = 0;
+for (const r of houseRows) {
+  const v = Number(r.candidatevotes) || 0;
+  if (r.party === 'DEMOCRAT') houseNatD += v;
+  else if (r.party === 'REPUBLICAN') houseNatR += v;
+}
+const house2024National = +(((houseNatR - houseNatD) / (houseNatR + houseNatD)) * 100).toFixed(2);
+
 const house2024 = {};
 for (const [k, rows] of byDist) {
   const m = raceMargin(rows, ['party', 'party_detailed']);
@@ -299,6 +325,7 @@ const out = {
     generated: new Date().toISOString(),
     electionDate: '2026-11-03',
     trump2024National,
+    house2024National,
     nationalRollupId,
     sources: {
       liveResults: 'civicAPI https://civicapi.org/api/v2 (free, no key, attribution requested)',
@@ -342,6 +369,7 @@ fs.writeFileSync(R('build/warnings.txt'), warn.join('\n') + '\n');
 
 console.log(JSON.stringify(out.meta.counts, null, 2));
 console.log(`\nnational 2024 Trump two-party margin: ${trump2024National}`);
+console.log(`national 2024 House  two-party margin: ${house2024National}`);
 console.log(`data.json: ${(fs.statSync(R('build/data.json')).size / 1024).toFixed(0)} KB`);
 console.log('\nfirst 15 warnings:');
 console.log(warn.slice(0, 15).map(w => '  ' + w).join('\n') || '  none');
