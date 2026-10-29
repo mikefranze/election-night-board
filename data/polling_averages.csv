@@ -16,27 +16,27 @@
 # `opponent` names the party of that leading non-Republican. The sign of the
 # margin cannot tell you this, and the candidate list cannot either: Montana has
 # BOTH a Democrat (Bankhead) and an independent (Bodnar) on the ballot, and it is
-# the independent polling second, 13.6 points clear of the Democrat. Guessing
+# the independent polling second, 17.9 points clear of the Democrat. Guessing
 # "the Democrat, since one is running" is exactly the mis-attribution that once
 # reported Minnesota as a D-to-I flip. Filled in on every row rather than
 # defaulted, because a silent default is what caused that bug.
 race_key,margin,source,as_of,opponent
-senate/AK,-2.0,poll avg; Sullivan 47.7 / Peltola 49.7,2026-10-28,D
-senate/FL,6.4,poll avg; Moody 49.9 / Nixon 43.5,2026-10-28,D
-senate/GA,-10.2,poll avg; Collins 42.4 / Ossoff 52.6,2026-10-28,D
-senate/IA,-0.6,poll avg; Hinson 45.5 / Turek 46.1,2026-10-28,D
-senate/KS,-0.2,poll avg; Marshall 45.7 / Hamilton 45.9,2026-10-28,D
-senate/ME,-3.0,poll avg; Collins 46.5 / Jackson 49.5,2026-10-28,D
-senate/MI,-3.2,poll avg; Rogers 45.2 / El-Sayed 48.4,2026-10-28,D
-senate/MN,-7.8,poll avg; Tafoya 41.9 / Flanagan 49.7,2026-10-28,D
-senate/MT,12.0,poll avg; Alme (R) 42.4 / Bodnar (I) 30.4 / Bankhead (D) 16.8,2026-10-28,I
-senate/NE,0.3,poll avg; Ricketts 46.4 / Osborn (I) 46.1,2026-10-28,I
-senate/NH,-6.9,poll avg; Sununu 43.1 / Pappas 50.0,2026-10-28,D
-senate/NC,-9.7,poll avg; Whatley 41.9 / Cooper 51.6,2026-10-28,D
-senate/OH,-3.3,poll avg; Husted 44.7 / Brown 48.0,2026-10-28,D
-senate/SC,0.7,poll avg; Graham 45.4 / Andrews 44.7,2026-10-28,D
-senate/SD,13.0,poll avg; Rounds 53.9 / Bengs 40.9,2026-10-28,D
-senate/TX,-2.8,poll avg; Paxton 46.2 / Talarico 49.0,2026-10-28,D
+senate/AK,-2.0,poll avg; Sullivan 47.7 / Peltola 49.7,2026-10-29,D
+senate/FL,6.4,poll avg; Moody 49.9 / Nixon 43.5,2026-10-29,D
+senate/GA,-10.2,poll avg; Collins 42.4 / Ossoff 52.6,2026-10-29,D
+senate/IA,-0.5,poll avg; Hinson 45.5 / Turek 46.0,2026-10-29,D
+senate/KS,-1.5,poll avg; Marshall 45.4 / Hamilton 46.9,2026-10-29,D
+senate/ME,-3.2,poll avg; Collins 46.2 / Jackson 49.4,2026-10-29,D
+senate/MI,-4.4,poll avg; Rogers 44.5 / El-Sayed 48.9,2026-10-29,D
+senate/MN,-7.3,poll avg; Tafoya 42.2 / Flanagan 49.5,2026-10-29,D
+senate/MT,8.3,poll avg; Alme (R) 41.4 / Bodnar (I) 33.1 / Bankhead (D) 15.2,2026-10-29,I
+senate/NE,0.2,poll avg; Ricketts 46.4 / Osborn (I) 46.2,2026-10-29,I
+senate/NH,-6.8,poll avg; Sununu 42.7 / Pappas 49.5,2026-10-29,D
+senate/NC,-10.2,poll avg; Whatley 41.6 / Cooper 51.8,2026-10-29,D
+senate/OH,-3.3,poll avg; Husted 44.7 / Brown 48.0,2026-10-29,D
+senate/SC,0.8,poll avg; Graham Nordone 45.5 / Andrews 44.7,2026-10-29,D
+senate/SD,13.1,poll avg; Rounds 54.0 / Bengs 40.9,2026-10-29,D
+senate/TX,-3.5,poll avg; Paxton 45.6 / Talarico 49.1,2026-10-29,D
 gov/AZ,-8.0,poll avg; Biggs 41.6 / Hobbs 49.6,2026-10-28,D
 gov/CA,-21.9,poll avg; Hilton 36.1 / Becerra 58.0,2026-10-28,D
 gov/CT,-18.5,poll avg; Fazio 36.4 / Lamont 54.9,2026-10-28,D
