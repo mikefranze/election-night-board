@@ -655,6 +655,19 @@ function marginFromRace(race) {
   };
 }
 
+/* Does this record have a count in it yet?
+
+   A race record exists for every contest days before a single vote does, and
+   marginFromRace sorts its candidates by votes. With every vote at zero that
+   sort is stable, so "the top candidate" is whoever the feed happens to list
+   first - and the three tables were showing that name with a party swatch
+   beside it, as though someone were leading. Minnesota showed Marisa Simonetti,
+   an independent polling fourth, five days before the election.
+
+   Nothing leads until something is counted, so the leader cells ask this first
+   and fall back to the matchup (Senate) or an em dash (Governor, House). */
+const hasCount = (res) => !!res && (res.total || 0) > 0;
+
 /* ============================================================
    Fetching
    ============================================================ */
@@ -2507,7 +2520,7 @@ function renderSenate(rows) {
 
   const body = el('tbody');
   for (const r of sortRows(enriched, 'sentable')) {
-    const top = (r.res?.candidates || []).slice(0, 2);
+    const top = hasCount(r.res) ? (r.res.candidates || []).slice(0, 2) : [];
     const lead = top.length
       ? el('td', { class: 'l' }, [
           el('span', { class: 'swatch', style: `background:${partyColor(top[0].party)}` }),
@@ -2578,7 +2591,7 @@ function renderGovernor(rows) {
   });
   const body = el('tbody');
   for (const r of sortRows(enriched, 'govtable')) {
-    const top = (r.res?.candidates || []).slice(0, 2);
+    const top = hasCount(r.res) ? (r.res.candidates || []).slice(0, 2) : [];
     const tr = el('tr', { style: r.raceId ? 'cursor:pointer' : '' }, [
       el('td', { class: 'l', text: r.stateName }),
       top.length
@@ -2630,7 +2643,7 @@ function renderHouse(rows) {
   }));
   const body = el('tbody');
   for (const r of sortRows(enriched, 'housetable')) {
-    const top = (r.res?.candidates || []).slice(0, 2);
+    const top = hasCount(r.res) ? (r.res.candidates || []).slice(0, 2) : [];
     const h = r.house2024;
     const rd = DATA.redistricted[r.district] || null;
     body.append(el('tr', {}, [
