@@ -3470,8 +3470,26 @@ function makeDemo() {
     const base = Number.isFinite(r.trump2024) ? r.trump2024 : 0;
     // A plausible polling average: 2024 baseline, national swing, incumbency-ish noise.
     const poll = base + NAT_SWING + gauss() * 2.5;
+
+    // Who the real opponent is, resolved by the same function the live board
+    // uses, so a rehearsal cannot disagree with the night about who is running.
+    // The hint has to come from the REAL DATA.polling: who the opponent is, is a
+    // fact about the race, not about these invented numbers, and the demo's own
+    // polling row does not exist yet. Without this the ballot heuristic takes
+    // over and prefers a Democrat wherever one is on the ballot, which put
+    // Bankhead in Montana's demo row against a margin that is Alme vs Bodnar.
+    const oppParty = nonRepParty({
+      key: `senate/${r.state}`,
+      candidates: r.candidates,
+      res: null,
+      poll: DATA.polling[`senate/${r.state}`] || null,
+    });
+    // Carried onto the synthetic row too, so every later nonRepParty() call
+    // during a demo gets the same answer even in a race that draws 0% reporting
+    // and so has no synthetic votes to read it off.
     polling[`senate/${r.state}`] = {
       margin: +poll.toFixed(1), source: 'DEMO DATA — not a real poll', asOf: DATA.meta.electionDate,
+      opponent: oppParty,
     };
     // A "true" result that misses the poll, plus a count in progress.
     const truth = poll + gauss() * 2.2 + 1.0;
@@ -3481,16 +3499,23 @@ function makeDemo() {
     const counted = total * rep / 100;
     const lead = counted * (1 + observed / 100) / 2;
     const rc = r.candidates.find(c => c.party === 'Republican');
-    const dc = r.candidates.find(c => /Democratic/.test(c.party || ''))
-            || r.candidates.find(c => /Independent/.test(c.party || ''));
+    const isOpp = oppParty === 'I'
+      ? (p) => /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '')
+      : (p) => /^Democratic/i.test(p || '');
+    const dc = r.candidates.find(c => isOpp(c.party));
     live.set(`senate/${r.state}`, {
       margin: +observed.toFixed(2), reporting: +rep.toFixed(1), total: Math.round(counted),
       twoSum: Math.round(counted),
       candidates: [
         { name: (rc && rc.name) || 'Republican', party: 'R', votes: Math.round(lead), pct: 0, winner: rep > 97 && observed > 0 },
-        { name: (dc && dc.name) || 'Democrat', party: 'D', votes: Math.round(counted - lead), pct: 0, winner: rep > 97 && observed < 0 },
+        // party is oppParty, not a hardcoded 'D'. Once there are synthetic votes
+        // nonRepParty() reads the winner straight off this record, so writing 'D'
+        // here would have reported a demo Montana or Nebraska as a Democratic
+        // pickup -- the same mis-attribution the live path has guarded against
+        // since it reported Minnesota as a D-to-I flip.
+        { name: (dc && dc.name) || (oppParty === 'I' ? 'Independent' : 'Democrat'), party: oppParty, votes: Math.round(counted - lead), pct: 0, winner: rep > 97 && observed < 0 },
       ].sort((a, b) => b.votes - a.votes),
-      called: rep > 97, calledFor: observed > 0 ? 'R' : 'D',
+      called: rep > 97, calledFor: observed > 0 ? 'R' : oppParty,
       raceId: r.raceId, source: 'demo',
     });
   }

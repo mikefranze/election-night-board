@@ -20,6 +20,12 @@
 # "the Democrat, since one is running" is exactly the mis-attribution that once
 # reported Minnesota as a D-to-I flip. Filled in on every row rather than
 # defaulted, because a silent default is what caused that bug.
+#
+# Three races are not R-vs-D. Montana and Nebraska are the known ones. South
+# Dakota is the third and was wrong here for a while: Bengs ran as a Democrat in
+# 2022 and this file said D, but the 2026 ballot carries him as an Independent
+# and the feed's roster for the race is just those two names. Checked against the
+# roster rather than from memory, which is the only way this column stays right.
 race_key,margin,source,as_of,opponent
 senate/AK,-2.0,poll avg; Sullivan 47.7 / Peltola 49.7,2026-10-29,D
 senate/FL,6.4,poll avg; Moody 49.9 / Nixon 43.5,2026-10-29,D
@@ -35,7 +41,7 @@ senate/NH,-6.8,poll avg; Sununu 42.7 / Pappas 49.5,2026-10-29,D
 senate/NC,-10.2,poll avg; Whatley 41.6 / Cooper 51.8,2026-10-29,D
 senate/OH,-3.3,poll avg; Husted 44.7 / Brown 48.0,2026-10-29,D
 senate/SC,0.8,poll avg; Graham Nordone 45.5 / Andrews 44.7,2026-10-29,D
-senate/SD,13.1,poll avg; Rounds 54.0 / Bengs 40.9,2026-10-29,D
+senate/SD,13.1,poll avg; Rounds 54.0 / Bengs (I) 40.9,2026-10-29,I
 senate/TX,-3.5,poll avg; Paxton 45.6 / Talarico 49.1,2026-10-29,D
 gov/AZ,-8.0,poll avg; Biggs 41.6 / Hobbs 49.6,2026-10-28,D
 gov/CA,-21.9,poll avg; Hilton 36.1 / Becerra 58.0,2026-10-28,D
