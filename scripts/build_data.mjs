@@ -277,17 +277,61 @@ let pollTimes = {};
   }
 }
 
+/* ---------- 5b. Districts redrawn since 2024 ---------- */
+// Nine states vote on new congressional lines on election day, 115 districts in
+// all. For those the 2024 House result measures a different electorate, so it
+// cannot anchor the prior and cannot qualify the seat as competitive either.
+// The 2024 presidential vote recomputed on the current lines can do both. The
+// CSV header records what is deliberately absent from it and why.
+const redistricted = {};
+{
+  const rdPath = R('data/redistricting_2026.csv');
+  if (fs.existsSync(rdPath)) {
+    const lines = fs.readFileSync(rdPath, 'utf8').split(/\r?\n/)
+      .filter(l => l.trim() && !l.trimStart().startsWith('#'));
+    if (lines.length > 1) {
+      const tmp = R('build/.redist.tmp.csv');
+      fs.mkdirSync(R('build'), { recursive: true });
+      fs.writeFileSync(tmp, lines.join('\n'));
+      for (const row of parseDelimited(tmp, ',')) {
+        const k = String(row.district || '').trim();
+        const pres = Number(row.pres_2026_lines);
+        if (!k || !Number.isFinite(pres)) continue;
+        const prev = Number(row.pres_2024_lines);
+        redistricted[k] = {
+          pres: +pres.toFixed(2),
+          shift: Number.isFinite(prev) ? +(pres - prev).toFixed(2) : null,
+          enacted: String(row.enacted || '').trim(),
+        };
+      }
+      fs.unlinkSync(tmp);
+    }
+  } else {
+    warn.push('redistricting_2026.csv missing; redrawn districts will be primed from lines that no longer exist');
+  }
+}
+
 /* ---------- 6. House watchlist: data-driven, not hand-picked ---------- */
 const houseWatch = Object.keys(trump2024ByCd)
-  .map(k => ({
-    district: k, state: k.split('-')[0],
-    trump2024: trump2024ByCd[k],
-    house2024: house2024[k] || null,
-  }))
+  .map(k => {
+    const rd = redistricted[k] || null;
+    return {
+      district: k, state: k.split('-')[0],
+      // On a redrawn district this is the 2024 presidential vote recomputed on
+      // the lines in use, so tonight's Swing column compares the same voters
+      // rather than whoever happened to live in this number two years ago.
+      trump2024: rd ? rd.pres : trump2024ByCd[k],
+      house2024: house2024[k] || null,
+      redrawn: !!rd,
+    };
+  })
   // Math.abs(null) is 0, which would smuggle unknown-margin districts in as tossups,
-  // so test for a real number first.
+  // so test for a real number first. A redrawn district cannot qualify on its
+  // 2024 House margin, which was run in a seat that no longer exists: TN-09 was
+  // D+47 and is now R+21, and selecting on the old figure would both keep the
+  // safe seat out and leave the competitive one off the list.
   .filter(d => (Number.isFinite(d.trump2024) && Math.abs(d.trump2024) < 10)
-            || (d.house2024 && Math.abs(d.house2024.margin) < 10))
+            || (!d.redrawn && d.house2024 && Math.abs(d.house2024.margin) < 10))
   .sort((a, b) => Math.abs(a.trump2024 ?? 99) - Math.abs(b.trump2024 ?? 99));
 
 /* ---------- 7. Polling averages (user-supplied, nothing invented) ---------- */
@@ -334,12 +378,14 @@ const out = {
       senateHistory: 'MIT Election Data + Science Lab, U.S. Senate statewide 1976-2024 (doi:10.7910/DVN/PEJ5QU)',
       houseHistory: 'MIT Election Data + Science Lab, U.S. House 1976-2024 (doi:10.7910/DVN/IG0UN2)',
       polling: 'data/polling_averages.csv (user-supplied)',
+      redistricting: 'The Downballot, 2024 presidential by CD on the 2026 lines (calc. Daniel Donner), differenced against the same release on the 2024 lines',
     },
     counts: {},
   },
   stateNames: STATES,
   trump2024ByState,
   trump2024ByCd,
+  redistricted,
   counties,
   senatePrevByCounty,
   senatePrevByState,
@@ -356,6 +402,7 @@ out.meta.counts = {
   pollTimes: Object.keys(pollTimes).length,
   counties: Object.keys(counties).length,
   cds: Object.keys(trump2024ByCd).length,
+  redrawnCds: Object.keys(redistricted).length,
   houseDistrictsWith2024: Object.keys(house2024).length,
   houseWatch: houseWatch.length,
   pollingRows: Object.keys(polling).length,

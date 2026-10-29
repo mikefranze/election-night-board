@@ -1,0 +1,145 @@
+# Districts whose congressional lines changed between the 2024 and 2026
+# elections. margins are Republican minus Democrat, in points, matching the rest
+# of the board: R+3 -> 3, D+3 -> -3.
+#
+# WHY THIS FILE EXISTS. The House prior is the district's own 2024 House result
+# re-centred on the environment dial. For a district that was redrawn, that
+# result describes a different set of voters, so the prior is anchored to an
+# electorate that no longer exists. Nine states vote on new lines on 2026-11-03,
+# which is 115 districts, 36 of them moved by 10 points or more.
+#
+# pres_2026_lines is the 2024 presidential vote recomputed on the lines actually
+# in use, so it is the only 2024 number for these districts that compares like
+# with like. pres_2024_lines is the same quantity on the old lines and is kept
+# only so the shift can be audited; nothing reads it.
+#
+# A district whose lines did not change is NOT listed here and keeps the 2024
+# House prior, which carries incumbency the presidential figure cannot.
+#
+# NOT IN THIS FILE, deliberately: Missouri and Virginia. Both passed new maps
+# and neither is using one. Missouri's was blocked by its Supreme Court and the
+# 2022 lines govern, with the new map on the ballot as Proposition A; Virginia's
+# amendment was struck down. Their districts are unchanged from 2024 and must
+# keep the House prior. Every state with no new map measures a shift of exactly
+# 0.00 against this source, which is how that was checked.
+#
+# Source: The Downballot, 2024 presidential results by congressional district,
+# calculated by Daniel Donner, 2026-07-09 release covering the 2026 lines,
+# differenced against the same outfit's 2024-lines release. Fetched 2026-10-28.
+# https://www.the-downballot.com/p/the-downballot-releases-presidential
+district,pres_2026_lines,pres_2024_lines,enacted
+AL-01,36.02,55.32,"SCOTUS stay Jun 2026 restored the 2023 map"
+AL-02,14.34,-8.23,"SCOTUS stay Jun 2026 restored the 2023 map"
+AL-06,34.61,38.55,"SCOTUS stay Jun 2026 restored the 2023 map"
+AL-07,-17.80,-23.36,"SCOTUS stay Jun 2026 restored the 2023 map"
+CA-01,-12.22,24.95,"Proposition 50, Nov 2025"
+CA-02,-24.64,-45.16,"Proposition 50, Nov 2025"
+CA-03,-10.16,3.82,"Proposition 50, Nov 2025"
+CA-04,-14.50,-31.22,"Proposition 50, Nov 2025"
+CA-05,20.70,17.71,"Proposition 50, Nov 2025"
+CA-06,-8.40,-13.87,"Proposition 50, Nov 2025"
+CA-07,-12.81,-29.75,"Proposition 50, Nov 2025"
+CA-08,-34.06,-43.58,"Proposition 50, Nov 2025"
+CA-09,-11.42,1.78,"Proposition 50, Nov 2025"
+CA-13,-0.37,5.43,"Proposition 50, Nov 2025"
+CA-17,-38.97,-37.90,"Proposition 50, Nov 2025"
+CA-18,-28.45,-29.50,"Proposition 50, Nov 2025"
+CA-20,32.23,30.33,"Proposition 50, Nov 2025"
+CA-21,-5.97,-3.79,"Proposition 50, Nov 2025"
+CA-22,1.85,5.83,"Proposition 50, Nov 2025"
+CA-23,19.40,16.86,"Proposition 50, Nov 2025"
+CA-25,-5.81,-2.47,"Proposition 50, Nov 2025"
+CA-26,-15.28,-13.16,"Proposition 50, Nov 2025"
+CA-27,-9.73,-3.89,"Proposition 50, Nov 2025"
+CA-28,-25.28,-26.94,"Proposition 50, Nov 2025"
+CA-29,-33.64,-34.80,"Proposition 50, Nov 2025"
+CA-30,-40.02,-41.06,"Proposition 50, Nov 2025"
+CA-31,-12.23,-16.90,"Proposition 50, Nov 2025"
+CA-32,-25.00,-31.35,"Proposition 50, Nov 2025"
+CA-33,-9.78,-8.73,"Proposition 50, Nov 2025"
+CA-35,-7.80,-10.27,"Proposition 50, Nov 2025"
+CA-38,-12.32,-16.08,"Proposition 50, Nov 2025"
+CA-40,12.23,2.32,"Proposition 50, Nov 2025"
+CA-41,-14.20,5.93,"Proposition 50, Nov 2025"
+CA-42,-13.13,-32.43,"Proposition 50, Nov 2025"
+CA-44,-35.17,-33.82,"Proposition 50, Nov 2025"
+CA-45,-3.94,-1.54,"Proposition 50, Nov 2025"
+CA-46,-16.16,-17.73,"Proposition 50, Nov 2025"
+CA-47,-10.08,-4.17,"Proposition 50, Nov 2025"
+CA-48,-3.39,15.31,"Proposition 50, Nov 2025"
+CA-49,-12.10,-7.76,"Proposition 50, Nov 2025"
+CA-50,-18.25,-29.56,"Proposition 50, Nov 2025"
+CA-51,-18.26,-23.50,"Proposition 50, Nov 2025"
+CA-52,-17.57,-21.19,"Proposition 50, Nov 2025"
+FL-08,16.21,22.34,"legislature, May 2026"
+FL-09,17.77,-3.51,"legislature, May 2026"
+FL-10,-23.99,-22.71,"legislature, May 2026"
+FL-12,15.39,34.58,"legislature, May 2026"
+FL-13,13.32,11.86,"legislature, May 2026"
+FL-14,10.51,-7.67,"legislature, May 2026"
+FL-15,19.85,11.19,"legislature, May 2026"
+FL-16,13.70,15.47,"legislature, May 2026"
+FL-17,22.09,23.95,"legislature, May 2026"
+FL-18,16.95,29.40,"legislature, May 2026"
+FL-19,30.22,29.17,"legislature, May 2026"
+FL-20,-37.16,-39.61,"legislature, May 2026"
+FL-22,10.28,-5.57,"legislature, May 2026"
+FL-23,-13.73,-1.91,"legislature, May 2026"
+FL-24,-38.70,-30.05,"legislature, May 2026"
+FL-25,9.14,-5.33,"legislature, May 2026"
+FL-26,18.39,34.97,"legislature, May 2026"
+LA-02,-47.37,-31.38,"legislature, May 2026"
+LA-03,36.00,44.78,"legislature, May 2026"
+LA-04,34.23,52.14,"legislature, May 2026"
+LA-05,34.04,36.27,"legislature, May 2026"
+LA-06,30.09,-14.98,"legislature, May 2026"
+NC-01,11.55,3.10,"legislature, Oct 2025"
+NC-03,13.63,21.86,"legislature, Oct 2025"
+OH-01,2.60,-6.34,"redistricting commission, Oct 2025"
+OH-02,42.16,47.58,"redistricting commission, Oct 2025"
+OH-04,42.64,36.76,"redistricting commission, Oct 2025"
+OH-05,23.75,29.26,"redistricting commission, Oct 2025"
+OH-08,15.62,23.69,"redistricting commission, Oct 2025"
+OH-09,10.58,6.71,"redistricting commission, Oct 2025"
+OH-10,7.79,5.74,"redistricting commission, Oct 2025"
+OH-12,30.09,32.73,"redistricting commission, Oct 2025"
+OH-13,-3.29,-0.05,"redistricting commission, Oct 2025"
+OH-14,20.36,17.94,"redistricting commission, Oct 2025"
+TN-04,23.92,43.58,"legislature, May 2026"
+TN-05,23.08,17.77,"legislature, May 2026"
+TN-06,26.52,35.21,"legislature, May 2026"
+TN-08,20.14,41.13,"legislature, May 2026"
+TN-09,21.14,-43.40,"legislature, May 2026"
+TX-01,49.54,51.28,"legislature, Aug 2025"
+TX-03,23.43,20.07,"legislature, Aug 2025"
+TX-04,24.71,32.59,"legislature, Aug 2025"
+TX-05,21.62,27.08,"legislature, Aug 2025"
+TX-06,22.93,28.54,"legislature, Aug 2025"
+TX-07,-23.43,-20.77,"legislature, Aug 2025"
+TX-08,27.64,33.88,"legislature, Aug 2025"
+TX-09,19.79,-44.11,"legislature, Aug 2025"
+TX-10,22.64,24.83,"legislature, Aug 2025"
+TX-11,34.39,45.46,"legislature, Aug 2025"
+TX-12,23.88,22.60,"legislature, Aug 2025"
+TX-13,46.20,47.79,"legislature, Aug 2025"
+TX-14,24.30,34.05,"legislature, Aug 2025"
+TX-17,21.66,29.24,"legislature, Aug 2025"
+TX-18,-54.97,-39.81,"legislature, Aug 2025"
+TX-20,-28.53,-21.27,"legislature, Aug 2025"
+TX-21,21.84,23.64,"legislature, Aug 2025"
+TX-22,22.27,19.54,"legislature, Aug 2025"
+TX-25,24.08,36.34,"legislature, Aug 2025"
+TX-27,21.23,29.67,"legislature, Aug 2025"
+TX-28,10.38,7.29,"legislature, Aug 2025"
+TX-29,-30.45,-20.40,"legislature, Aug 2025"
+TX-31,21.88,23.27,"legislature, Aug 2025"
+TX-32,17.79,-23.75,"legislature, Aug 2025"
+TX-33,-32.75,-33.77,"legislature, Aug 2025"
+TX-34,10.14,4.43,"legislature, Aug 2025"
+TX-35,10.46,-33.64,"legislature, Aug 2025"
+TX-36,24.99,36.78,"legislature, Aug 2025"
+TX-37,-56.61,-49.34,"legislature, Aug 2025"
+UT-01,-23.63,20.04,"court order, Nov 2025"
+UT-02,29.00,20.32,"court order, Nov 2025"
+UT-03,41.38,19.31,"court order, Nov 2025"
+UT-04,32.51,26.68,"court order, Nov 2025"

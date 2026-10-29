@@ -28,13 +28,24 @@ section matters if these slip.
 anchor on polling at ±4.6. The 19 Senate and 18 Governor races with no row fall
 back to the national-environment prior described below, at ±8.
 
-No House polling rows at all, so every district prior is its **2024 House result
+No House polling rows at all, so every district prior is its **2024 result
 re-centred on the environment dial** — the same dial the Senate and Governor
 no-poll races use, but swung off the right baseline. House districts anchor on
 the 2024 national *House* vote (**R+3.31**, measured in `build_data.mjs` from the
 same MEDSL rows that produce each district margin), not the presidential R+1.5;
 using the presidential figure would have left every district 1.81 points too
-Republican. At the D+9 default the chamber projects **D 244 / R 191**.
+Republican.
+
+**Except where the lines moved.** Nine states vote on new congressional maps on
+3 November — 115 districts, 36 of them shifted by 10 points or more. For those
+the 2024 House result measures an electorate that no longer exists, so they are
+primed instead from the 2024 presidential vote recomputed on the current lines
+(`data/redistricting_2026.csv`), and therefore swing off the presidential
+anchor. `housePrior()` is the only place that choice is made; the chamber count
+and the flip list both come through it. What those 115 lose is incumbency, which
+a House margin carries and a presidential margin does not — unavoidable, since
+the incumbency in their 2024 margin belonged to a different seat. At the D+9
+default the chamber projects **D 237 / R 198**.
 
 Two properties keep it honest. Parking the dial at R+3.31 — a zero shift —
 reproduces the real 2024 chamber, 220 R / 215 D, which is the regression test.
@@ -43,16 +54,30 @@ point is identical to moving the dial a point, so the anchor choice is not
 load-bearing.
 
 It is a **uniform-swing** model and should be read as one. It moves all 435
-districts by the same number of points and knows nothing about retirements,
-candidate quality or redistricting. It is also sensitive near the middle: the
-median district sat at R+1.01 while the national vote was R+3.31, so the chamber
-changes hands at about R+2.3 on the dial rather than at even. The 22 districts
-uncontested in 2024 carry meaningless margins but sit far enough from even that
-no dial setting flips them.
+districts by the same number of points and knows nothing about retirements or
+candidate quality. It now knows where the boundaries are, but only as a 2024
+presidential number attached to them — not as anything that understands why they
+were drawn that way.
+
+It is sensitive near the middle, and the new maps moved where the middle is. On
+the 2024 lines the chamber changed hands at about **R+2.3** on the dial, so
+Democrats could lose the national vote by two points and still take it. Primed
+from the current lines it changes hands at about **D+0.75**: they now have to win
+the national vote outright. Holding the prior basis fixed and changing only the
+boundaries, the maps are worth about **7 R seats** at the D+9 dial and about 4 at
+a neutral one — they are drawn to blunt a wave, so they pay off most in the
+environment they were built to survive. The remaining three-point move is the
+incumbency those 115 districts no longer get credited with, and the two cannot
+be separated from inside this model.
+
+The 22 districts uncontested in 2024 carry meaningless margins but sit far
+enough from even that no dial setting flips them.
 
 Live returns land for all 435 districts and the count converges to them as the
-night goes on. The 97-district watchlist drives the House *table*; the seat
-total spans the full chamber. **Flips are still only claimed where a district
+night goes on. The 84-district watchlist drives the House *table*; the seat
+total spans the full chamber. The watchlist is selected on whichever lines each
+district is actually using, so seats the new maps built out of 40-point blowouts
+(TN-09, TX-09, TX-35) appear and seats they made safe drop off. **Flips are still only claimed where a district
 has actually reported** — a dial setting is an assumption, not a seat changing
 hands — but the flip list blends from the same shifted prior, so the two never
 disagree about the same district.

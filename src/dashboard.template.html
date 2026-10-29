@@ -439,7 +439,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   <div class="hrow" style="margin-bottom:8px">
     <div>
       <h2>House watchlist <span class="sub" id="housecount"></span></h2>
-      <div class="sub">Districts within 10 points on the 2024 presidential or 2024 House margin. Selected from the data, not hand-picked.</div>
+      <div class="sub">Districts within 10 points on the 2024 presidential or 2024 House margin, measured on the lines each one is actually using. Selected from the data, not hand-picked.</div>
     </div>
   </div>
   <div class="scroll vscroll" style="max-height:520px">
@@ -861,7 +861,9 @@ function houseRows() {
       reporting: res ? res.reporting : null,
       pollError: (live !== null && poll) ? live - poll.margin : null,
       swing2024: (live !== null && Number.isFinite(d.trump2024)) ? live - d.trump2024 : null,
-      swingLast: (live !== null && d.house2024 && Number.isFinite(d.house2024.margin) && !d.house2024.uncontested && !d.house2024.effectivelyUncontested)
+      // d.redrawn: subtracting the 2024 House margin of a district that has
+      // since been redrawn measures the boundary change, not the swing.
+      swingLast: (live !== null && !d.redrawn && d.house2024 && Number.isFinite(d.house2024.margin) && !d.house2024.uncontested && !d.house2024.effectivelyUncontested)
         ? live - d.house2024.margin : null,
     };
   });
@@ -1070,6 +1072,41 @@ const envLabel = () => marginLabel(ENV.generic2026, Number.isInteger(ENV.generic
  */
 const houseEnvShift = () => DATA.meta.house2024National - ENV.generic2026;
 
+/**
+ * The prior for one district, and the only place it is decided.
+ *
+ * Normally that is the district's own 2024 House result re-centred on the dial.
+ * For the 115 districts whose lines changed since 2024 it cannot be: that result
+ * was run in a different seat, and in the worst cases describes a completely
+ * different electorate (TN-09 was D+47 on the old lines and is R+21 on the new
+ * ones). Those districts are primed from the 2024 presidential vote recomputed
+ * on the lines actually in use, which is the only 2024 number for them that
+ * compares like with like.
+ *
+ * That also switches which national anchor they swing off, from the House vote
+ * to the presidential vote, and both are in meta for exactly this reason. The
+ * dial still means the same thing either way: a district sitting on its own
+ * anchor lands exactly on the dial.
+ *
+ * What is lost is incumbency. A House margin carries it and a presidential
+ * margin does not, so these 115 are primed more harshly than the rest. There is
+ * no honest way around that -- the incumbency in their 2024 margin belonged to
+ * a seat that no longer exists, and several of those incumbents are not even
+ * running in the new one.
+ *
+ * houseProjection() and houseFlips() must both come through here. They used to
+ * carry the formula separately and drifted apart once already, which showed the
+ * same district blending to two different margins in the chamber count and in
+ * the flip list.
+ */
+function housePrior(dist, h) {
+  const poll = DATA.polling[`house/${dist}`];
+  if (poll) return poll.margin;
+  const rd = DATA.redistricted[dist];
+  if (rd) return rd.pres - envShift();
+  return h.margin - houseEnvShift();
+}
+
 function projectRace(st, rows, poll) {
   const stateBase = DATA.trump2024ByState[st];
   const counted = rows.filter(r => r.counted2 > 0);
@@ -1254,17 +1291,23 @@ function projectSimple(row) {
  * meaningless margins, but they sit far enough from even that no dial setting
  * on the slider flips them.
  *
- * Uniform swing off this map is sensitive near the middle: the median district
- * sat at R+1.01 while the national vote was R+3.31, so the chamber changes
- * hands at about R+2.3 on the dial rather than at even. At the D+9 default it
- * projects D 244 / R 191.
+ * Uniform swing is sensitive near the middle, and the 2026 lines moved where
+ * the middle is. On the 2024 lines the chamber changed hands at about R+2.3 on
+ * the dial, so Democrats could lose the national vote by two points and still
+ * take it. With the redrawn districts primed from the current lines it changes
+ * hands at about D+0.75: they now have to win the national vote outright. That
+ * three-point move is the new maps plus the incumbency those 115 districts no
+ * longer get credited with, and the two cannot be separated from here.
+ *
+ * At the D+9 default it projects D 237 / R 198. Holding the prior basis fixed
+ * and changing only the boundaries, the maps are worth about 7 R seats at that
+ * dial and about 4 at a neutral one: they are drawn to blunt a wave, so they
+ * pay off most in the environment they were built to survive.
  */
 function houseProjection() {
   let D = 0, R = 0, live = 0;
-  const shift = houseEnvShift();
   for (const [dist, h] of Object.entries(DATA.house2024)) {
-    const poll = DATA.polling[`house/${dist}`];
-    const prior = poll ? poll.margin : h.margin - shift;
+    const prior = housePrior(dist, h);
     let m = prior;
     const res = resultFor(`house/${dist}`);
     if (res && Number.isFinite(res.margin)) {
@@ -1451,11 +1494,7 @@ function houseFlips() {
     if (!held) continue;
     const res = resultFor(`house/${dist}`);
     if (!res || !Number.isFinite(res.margin)) continue;      // no live data, no flip claim
-    const poll = DATA.polling[`house/${dist}`];
-    // Must match houseProjection()'s prior exactly, environment shift included,
-    // or the same district blends to a different margin in the chamber count
-    // and in this list.
-    const prior = poll ? poll.margin : h.margin - houseEnvShift();
+    const prior = housePrior(dist, h);
     const w = Math.min(Math.max(res.reporting ?? 0, 0), 100) / 100;
     if (w <= 0) continue;
     const projected = prior * (1 - w) + res.margin * w;
@@ -1464,7 +1503,12 @@ function houseFlips() {
     out.push({
       label: dist, key: `house/${dist}`, from: held, to: win,
       called: !!res.called, margin: projected, reporting: res.reporting ?? 0,
-      note: `${h.winner} held it in 2024`,
+      // On a redrawn district this is not one seat changing hands, it is a
+      // different seat with the same number, so do not let the note imply a
+      // like-for-like flip.
+      note: DATA.redistricted[dist]
+        ? `lines redrawn since 2024 (${DATA.redistricted[dist].enacted}); ${h.winner} held the old seat`
+        : `${h.winner} held it in 2024`,
     });
   }
   return out;
@@ -1902,7 +1946,7 @@ function renderTiles(rows, stats) {
     ]),
     el('div', { class: 'note', text: hp.live
       ? `${hp.live} of ${hp.total} districts counting · 218 for control`
-      : `2024 House result swung to ${envLabel()} — no district has reported yet` }),
+      : `2024 swung to ${envLabel()}; ${Object.keys(DATA.redistricted).length} districts on new lines — none has reported yet` }),
   ]));
 
   // Governors
@@ -2441,8 +2485,15 @@ function renderHouse(rows) {
   for (const r of sortRows(enriched, 'housetable')) {
     const top = (r.res?.candidates || []).slice(0, 2);
     const h = r.house2024;
+    const rd = DATA.redistricted[r.district] || null;
     body.append(el('tr', {}, [
-      el('td', { class: 'l', text: r.district }),
+      el('td', { class: 'l' }, [
+        el('span', { text: r.district }),
+        rd ? el('span', {
+          class: 'pill', text: 'redrawn', style: 'margin-left:6px',
+          title: `Lines changed since 2024 (${rd.enacted}). Primed from the 2024 presidential vote on the current lines, which is ${marginLabel(rd.pres)} against ${marginLabel(rd.pres - rd.shift)} on the old ones.`,
+        }) : null,
+      ]),
       top.length
         ? el('td', { class: 'l' }, [
             el('span', { class: 'swatch', style: `background:${partyColor(top[0].party)}` }),
@@ -2454,10 +2505,17 @@ function renderHouse(rows) {
       reportingCell(r.reporting, r.res?.source),
       r.poll ? marginCell(r.poll.margin) : el('td', { class: 'muted', text: '—' }),
       marginCell(r.pollError),
-      Number.isFinite(r.trump2024) ? marginCell(r.trump2024)
+      Number.isFinite(r.trump2024)
+        ? el('td', {
+            class: 'cell-margin', style: `color:${marginColor(r.trump2024)}`,
+            title: rd ? 'Recomputed on the 2026 lines' : 'On the 2024 lines, which this district still uses',
+            text: marginLabel(r.trump2024),
+          })
         : el('td', { class: 'muted', text: '—', title: 'No 2024 presidential totals published for this district' }),
       marginCell(r.swing2024),
-      h ? el('td', {
+      rd
+        ? el('td', { class: 'muted', text: '—', title: `Lines changed since 2024 (${rd.enacted}); the 2024 House result was run in a different seat` })
+        : h ? el('td', {
             class: 'cell-margin', style: `color:${marginColor(h.margin)}`,
             title: `${h.winner} over ${h.runnerUp ?? 'no opponent'}`,
             text: (h.uncontested || h.effectivelyUncontested) ? `${h.winnerParty} unopp.` : marginLabel(h.margin),

@@ -25,7 +25,7 @@ still tell you something:
 |---|---|
 | **Summary** | Projected Senate, House and governor seat counts, headline tiles, systemic polling error, feed coverage and manual overrides |
 | **Senate** | Senate map with the 51st-seat line, the full race table, county detail for a selected race, county swing-vs-lean scatter |
-| **House** | The 97-district watchlist |
+| **House** | The 84-district watchlist |
 | **Governor** | All 36 governor races, with projections and county drill-down |
 
 Only the visible tab is rendered. The scatter alone can be a couple of thousand
@@ -372,6 +372,7 @@ board does not pretend otherwise, and the band is what carries that risk.
 | Live results, race calls, county breakdowns | [civicAPI](https://civicapi.org) — free, no key, attribution requested |
 | 2024 presidential by county + state | [tonmcg/US_County_Level_Election_Results_08-24](https://github.com/tonmcg/US_County_Level_Election_Results_08-24) |
 | 2024 presidential by congressional district | The Downballot, via the [jaytimm](https://github.com/jaytimm/PresElectionResults) mirror |
+| 2024 presidential on the **2026** district lines | [The Downballot](https://www.the-downballot.com/p/the-downballot-releases-presidential), calc. Daniel Donner — `data/redistricting_2026.csv`, the 115 districts redrawn since 2024. Checked by differencing against the same outfit's 2024-lines release: every state with no new map moves by exactly 0.00, and the crossover count on the old lines reproduces their published 16 |
 | Senate history 1976–2024 | MIT Election Data + Science Lab, `doi:10.7910/DVN/PEJ5QU` |
 | House history 1976–2024 | MIT Election Data + Science Lab, `doi:10.7910/DVN/IG0UN2` |
 | **County-level** Senate 2016–2024 | [pmheideman/us-county-election-results](https://github.com/pmheideman/us-county-election-results) v1.0.0 — MEDSL's county-level Senate files sit behind a Dataverse guestbook. Cross-checked against the MEDSL statewide file: GA R+1.8, NC R+1.8, MI D+1.7, CO D+9.5 all agree |
