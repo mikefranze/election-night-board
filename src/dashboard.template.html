@@ -446,6 +446,47 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
     <table id="housetable"><thead></thead><tbody></tbody></table>
   </div>
 </section>
+
+<!-- ===== what the new maps are worth ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>What the new maps are worth <span class="sub" id="mapeffectcount"></span></h2>
+      <div class="sub">The same 435 districts primed twice — once on the boundaries they used in 2024,
+        once on the boundaries they are using now — and the seat difference read across every national
+        environment. Priors only: a property of the maps, not of tonight's count.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub">Count
+      <select id="mapeffectscope">
+        <option value="all" selected>All nine states</option>
+        <option value="r">Republican-drawn only</option>
+      </select>
+    </label>
+  </div>
+  <div id="mapeffectzone"></div>
+</section>
+
+<!-- ===== district swing vs lean ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>District swing vs lean <span class="sub" id="hscattercount"></span></h2>
+      <div class="sub">Every reporting district. Vertical axis is the 2024 House margin restated on the
+        boundaries the district is using now; horizontal axis is how far it has moved since.
+        Dot size is 2024 presidential turnout; redrawn districts carry a ring.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub">Min. counted
+      <select id="hscattermin">
+        <option value="0">0%</option><option value="25">25%</option>
+        <option value="50" selected>50%</option><option value="80">80%</option>
+        <option value="95">95%</option>
+      </select>
+    </label>
+  </div>
+  <div id="hscatterzone"></div>
+</section>
 </div>
 
 <div data-panel="gov" hidden>
@@ -763,7 +804,15 @@ async function refresh() {
 const ELECTION_DAY_START = new Date(`${DATA.meta.electionDate}T00:00:00`);
 const beforeElectionDay = () => Date.now() < +ELECTION_DAY_START;
 /** A record holding votes before election day is the rehearsal feed, not a result. */
-const isTestRecord = (r) => beforeElectionDay() && !!r && (r.total > 0 || r.reporting > 0);
+/* The rehearsal feed publishes real-looking vote totals before election day, so
+   anything carrying votes this side of the date is suppressed on the calendar
+   rather than on the feed s own test_data flag, which it does not always set.
+
+   Demo records are exempt. They also carry votes before election day and are
+   otherwise indistinguishable, but the user asked for them, they are already
+   behind a banner, and without the exemption the Demo button does nothing at
+   all until 3 November -- which is the one stretch of time it exists for. */
+const isTestRecord = (r) => beforeElectionDay() && !!r && r.source !== 'demo' && (r.total > 0 || r.reporting > 0);
 
 const EMPTY_RESULT = { margin: null, reporting: 0, total: 0, twoSum: 0,
   candidates: [], called: false, calledFor: null, source: 'suppressed', testData: true };
@@ -1108,10 +1157,29 @@ const houseEnvShift = () => DATA.meta.house2024National - ENV.generic2026;
 function housePrior(dist, h) {
   const poll = DATA.polling[`house/${dist}`];
   if (poll) return poll.margin;
+  return housePriorOn(dist, h, 'new', ENV.generic2026);
+}
+
+/**
+ * The same formula with the boundaries and the dial as arguments, because the
+ * map-effect panel needs to ask for a district's prior on the lines it is NOT
+ * using. Writing that comparison as a second function would mean two copies of
+ * the fallback rule, and the difference between them would then be measuring
+ * the rule rather than the map -- so both maps come through here, and an
+ * unopposed 2024 race is priced off presidential on BOTH of them.
+ *
+ * Polling is deliberately absent: a polled district tells you about the race,
+ * not about the boundaries, and there are no House polling rows anyway.
+ */
+function housePriorOn(dist, h, lines, env) {
+  const hShift = DATA.meta.house2024National - env;
   const rd = DATA.redistricted[dist];
-  if (!rd) return h.margin - houseEnvShift();
-  if (h.uncontested || h.effectivelyUncontested) return rd.pres - envShift();
-  return (h.margin + rd.shift) - houseEnvShift();
+  if (!rd) return h.margin - hShift;
+  if (h.uncontested || h.effectivelyUncontested) {
+    const pres = lines === 'old' ? rd.pres - rd.shift : rd.pres;
+    return pres - (DATA.meta.trump2024National - env);
+  }
+  return (lines === 'old' ? h.margin : h.margin + rd.shift) - hShift;
 }
 
 /**
@@ -2816,6 +2884,231 @@ function setStatePick(kind, avail) {
 }
 
 /* ============================================================
+   What the new maps are worth
+   ============================================================ */
+/* The seven states where Republicans drew the map. California is the Democratic
+   one and Utah's came from a court, so both are counted separately rather than
+   folded into a single "redistricting" number that hides who drew what. */
+const R_DRAWN = new Set(['TX', 'NC', 'OH', 'FL', 'TN', 'LA', 'AL']);
+
+/**
+ * Prime all 435 districts twice at the same dial, once per map, and count the
+ * difference. Sweeping the dial turns that into a curve, which is the thing
+ * worth seeing: a gerrymander is not worth a fixed number of seats, it is worth
+ * different numbers in different national environments.
+ *
+ * Seat counts are integers, so the raw curve steps about by one seat at a time
+ * and a single district crossing over looks like a turning point. Smoothed over
+ * a +/-1 point window, which is narrow enough to keep the shape.
+ */
+function mapEffect(scope) {
+  const inScope = (k) => scope !== 'r' || R_DRAWN.has(k.slice(0, 2));
+  const raw = [];
+  for (let e = 8; e >= -24; e -= 0.25) {
+    let net = 0, oldR = 0, newR = 0;
+    for (const [dist, h] of Object.entries(DATA.house2024)) {
+      const o = housePriorOn(dist, h, 'old', e) > 0;
+      const n = housePriorOn(dist, h, 'new', e) > 0;
+      if (o) oldR++;
+      if (n) newR++;
+      if (o !== n && inScope(dist)) net += n ? 1 : -1;
+    }
+    raw.push({ e, net, oldR, newR });
+  }
+  return raw.map((p, i) => {
+    const w = raw.slice(Math.max(0, i - 4), i + 5);
+    return { ...p, smooth: w.reduce((t, g) => t + g.net, 0) / w.length };
+  });
+}
+
+function renderMapEffect() {
+  const zone = $('#mapeffectzone');
+  const scope = $('#mapeffectscope').value;
+  const pts = mapEffect(scope);
+  const at = (e) => pts.reduce((b, p) => Math.abs(p.e - e) < Math.abs(b.e - e) ? p : b, pts[0]);
+  const here = at(ENV.generic2026);
+  const peak = pts.reduce((b, p) => p.smooth > b.smooth ? p : b, pts[0]);
+  // Scanning from the Republican end, the first dial where the maps stop paying.
+  const be = pts.find(p => p.smooth <= 0) || null;
+  // The window where the two maps disagree about who holds the chamber. Read off
+  // the unsmoothed counts, since control is a threshold and not a trend.
+  const flipBand = pts.filter(p => p.oldR < 218 && p.newR >= 218);
+  const years = Object.entries(DATA.houseNationalByYear).map(([y, m]) => ({ y: +y, m }));
+  const beaten = be ? years.filter(v => v.m <= be.e) : [];
+
+  const W = 1000, H = 380, pad = { l: 56, r: 20, t: 18, b: 60 };
+  const xlo = -24, xhi = 8;
+  const lo = Math.min(-2, ...pts.map(p => p.smooth)), hi = Math.max(2, ...pts.map(p => p.smooth));
+  const ylo = Math.floor(lo) - 1, yhi = Math.ceil(hi) + 1;
+  const X = (v) => pad.l + ((v - xlo) / (xhi - xlo)) * (W - pad.l - pad.r);
+  const Y = (v) => H - pad.b - ((v - ylo) / (yhi - ylo)) * (H - pad.t - pad.b);
+  const P = [];
+
+  if (flipBand.length) {
+    const a = X(Math.min(...flipBand.map(p => p.e))), b = X(Math.max(...flipBand.map(p => p.e)));
+    P.push(`<rect x="${Math.min(a, b)}" y="${pad.t}" width="${Math.abs(b - a)}" height="${H - pad.t - pad.b}" fill="var(--ink-1)" opacity="0.09"/>`);
+  }
+  for (let v = xlo; v <= xhi; v += 4) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v === 0 ? 'EVEN' : (v > 0 ? 'R+' : 'D+') + Math.abs(v)}</text>`);
+  }
+  const ystep = (yhi - ylo) > 20 ? 5 : 2;
+  for (let v = Math.ceil(ylo / ystep) * ystep; v <= yhi; v += ystep) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/>`);
+    P.push(`<text x="${pad.l - 9}" y="${Y(v) + 4}" text-anchor="end">${v > 0 ? '+' + v : v}</text>`);
+  }
+  // Every election 1976-2024 on the same axis, so "would it take a bigger wave
+  // than has ever happened" is answered by looking rather than by asserting.
+  for (const v of years) {
+    if (v.m < xlo || v.m > xhi) continue;
+    P.push(`<line x1="${X(v.m)}" x2="${X(v.m)}" y1="${H - pad.b}" y2="${H - pad.b + 6}" stroke="var(--ink-muted)" stroke-width="1" opacity="0.7"><title>${v.y}: ${marginLabel(v.m)}</title></line>`);
+  }
+  P.push(`<text x="${(pad.l + W - pad.r) / 2}" y="${H - 8}" text-anchor="middle" class="lbl">national House vote  →  more Republican    ·    ticks are the 25 elections 1976-2024</text>`);
+  P.push(`<text transform="translate(14 ${(pad.t + H - pad.b) / 2}) rotate(-90)" text-anchor="middle" class="lbl">net seats to Republicans from the new maps</text>`);
+
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.e).toFixed(1)} ${Y(p.smooth).toFixed(1)}`).join(' ');
+  P.push(`<path d="${line}" fill="none" stroke="var(--rep)" stroke-width="2.5"/>`);
+  P.push(`<line x1="${X(ENV.generic2026)}" x2="${X(ENV.generic2026)}" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--ink-1)" stroke-width="1.5" stroke-dasharray="4 3"/>`);
+  P.push(`<text x="${X(ENV.generic2026) + 6}" y="${pad.t + 12}" class="lbl">dial ${envLabel()}</text>`);
+
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Seats the new maps are worth across national environments">${P.join('')}</svg>` }).firstElementChild;
+
+  const fmtDial = (v) => v === 0 ? 'EVEN' : marginLabel(v);
+  $('#mapeffectcount').textContent = scope === 'r' ? '· seven Republican-drawn states' : '· all nine redrawn states';
+  zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
+    el('span', { html: `at the current dial <b>${here.smooth >= 0 ? '+' : ''}${here.smooth.toFixed(1)}</b> R seats` }),
+    el('span', { html: `worth most at <b>${fmtDial(peak.e)}</b>, about <b>+${peak.smooth.toFixed(1)}</b>` }),
+    el('span', {
+      title: 'Past this point the seats the maps created are themselves lost, and the districts they were carved out of would have gone the same way under the old lines.',
+      html: be ? `stops paying at <b>${fmtDial(be.e)}</b>` : 'never stops paying inside the range drawn',
+    }),
+    be ? el('span', {
+      class: beaten.length ? '' : 'muted',
+      title: beaten.length ? beaten.map(v => `${v.y} ${marginLabel(v.m)}`).join(', ') : 'Measured from the project\'s own MEDSL House file, the same rows that set the R+3.31 anchor.',
+      html: `<b>${beaten.length}</b> of ${years.length} elections since 1976 reached it`,
+    }) : null,
+    flipBand.length ? el('span', {
+      class: 'muted',
+      title: 'Inside this band the old map seats a Democratic House and the new map a Republican one. Shaded on the chart.',
+      html: `decides control between <b>${fmtDial(Math.max(...flipBand.map(p => p.e)))}</b> and <b>${fmtDial(Math.min(...flipBand.map(p => p.e)))}</b>`,
+    }) : null,
+    el('span', { class: 'muted', text: 'smoothed over ±1 point · uniform swing, so a real wave would bite the thin new seats harder than this shows' }),
+  ]));
+}
+
+/* ============================================================
+   District swing vs lean scatter
+   ============================================================ */
+function renderHouseScatter() {
+  const zone = $('#hscatterzone');
+  const min = Number($('#hscattermin').value);
+  const pts = [];
+  let reporting = 0;
+  for (const [dist, h] of Object.entries(DATA.house2024)) {
+    const res = resultFor(`house/${dist}`);
+    if (!res || !Number.isFinite(res.margin)) continue;
+    reporting++;
+    if ((res.reporting ?? 0) < min) continue;
+    // Needs a baseline to be a lean, and an unopposed 2024 race has none.
+    const base = house2024Adjusted(dist, h);
+    if (base === null) continue;
+    pts.push({
+      dist, base, live: res.margin, swing: res.margin - base,
+      reporting: res.reporting ?? 0, votes: DATA.votes2024ByCd[dist] || 0,
+      rd: DATA.redistricted[dist] || null,
+    });
+  }
+  $('#hscattercount').textContent = pts.length ? `· ${pts.length} of ${reporting} reporting` : '';
+  if (!pts.length) {
+    zone.replaceChildren(el('div', { class: 'warnbox', text: reporting
+      ? `No district is at ${min}% counted or better yet. Lower the threshold to see partial returns.`
+      : 'No district has reported yet. Demo data fills this in without any requests.' }));
+    return;
+  }
+
+  const W = 1000, H = 560, pad = { l: 64, r: 22, t: 20, b: 52 };
+  const lim = (key, floor, round) => {
+    const m = Math.max(...pts.map(p => Math.abs(p[key])));
+    return Math.max(floor, Math.ceil(m / round) * round);
+  };
+  const xlim = lim('swing', 10, 5), ylim = lim('base', 40, 10);
+  const X = (v) => pad.l + ((v + xlim) / (2 * xlim)) * (W - pad.l - pad.r);
+  const Y = (v) => H - pad.b - ((v + ylim) / (2 * ylim)) * (H - pad.t - pad.b);
+  const maxV = Math.max(1, ...pts.map(p => p.votes));
+  const rad = (p) => 3 + 6 * Math.sqrt((p.votes || maxV / 2) / maxV);
+  const P = [];
+  const xs = xlim > 40 ? 20 : xlim > 20 ? 10 : 5;
+  for (let v = -Math.floor(xlim / xs) * xs; v <= xlim; v += xs) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+  }
+  const ys = ylim > 40 ? 20 : 10;
+  for (let v = -Math.floor(ylim / ys) * ys; v <= ylim; v += ys) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/>`);
+    P.push(`<text x="${pad.l - 9}" y="${Y(v) + 4}" text-anchor="end">${v === 0 ? 'EVEN' : (v > 0 ? 'R+' : 'D+') + Math.abs(v)}</text>`);
+  }
+  P.push(`<text x="${(pad.l + W - pad.r) / 2}" y="${H - 8}" text-anchor="middle" class="lbl">swing since 2024  →  more Republican</text>`);
+  P.push(`<text transform="translate(16 ${(pad.t + H - pad.b) / 2}) rotate(-90)" text-anchor="middle" class="lbl">2024 House margin on current lines</text>`);
+
+  // Turnout-weighted fit, the same question the county scatter asks: is the
+  // swing uniform, or does it depend on how partisan the district already was?
+  let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of pts) {
+    const w = p.votes || 1;
+    sw += w; sx += w * p.base; sy += w * p.swing;
+    sxx += w * p.base * p.base; sxy += w * p.base * p.swing;
+  }
+  const den = sw * sxx - sx * sx;
+  const slope = Math.abs(den) > 1e-9 ? (sw * sxy - sx * sy) / den : 0;
+  const intercept = (sy - slope * sx) / sw;
+
+  for (const p of [...pts].sort((a, b) => b.votes - a.votes)) {
+    P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.swing)}" opacity="0.6"/>`);
+    if (p.rd) P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${(rad(p) + 2.5).toFixed(1)}" fill="none" stroke="var(--ink-1)" stroke-width="1.2" opacity="0.75"/>`);
+  }
+  const yLo = Math.min(...pts.map(p => p.base)), yHi = Math.max(...pts.map(p => p.base));
+  const fit = (b) => intercept + slope * b;
+  P.push(`<line x1="${X(fit(yLo))}" y1="${Y(yLo)}" x2="${X(fit(yHi))}" y2="${Y(yHi)}" stroke="var(--ink-1)" stroke-width="2" stroke-dasharray="6 4" opacity="0.85"/>`);
+  P.push('<circle id="hhl" r="10" fill="none" stroke="var(--ink-1)" stroke-width="2" opacity="0"/>');
+
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="District swing versus 2024 margin on current lines">${P.join('')}</svg>` }).firstElementChild;
+  const hl = svg.querySelector('#hhl');
+  svg.addEventListener('mousemove', (ev) => {
+    const box = svg.getBoundingClientRect();
+    const mx = ((ev.clientX - box.left) / box.width) * W;
+    const my = ((ev.clientY - box.top) / box.height) * H;
+    let best = null, bd = 1e9;
+    for (const p of pts) {
+      const dx = X(p.swing) - mx, dy = Y(p.base) - my, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (!best || bd > 400) { hl.setAttribute('opacity', '0'); hideTip(); return; }
+    hl.setAttribute('cx', X(best.swing)); hl.setAttribute('cy', Y(best.base)); hl.setAttribute('opacity', '1');
+    showTip(ev, `<b>${esc(best.dist)}</b>${best.rd ? ' <span class="pill">redrawn</span>' : ''}
+      <div class="tr"><span>2024${best.rd ? ', restated' : ''}</span><span>${marginLabel(best.base)}</span></div>
+      <div class="tr"><span>Now</span><span>${marginLabel(best.live)}</span></div>
+      <div class="tr"><span>Swing</span><span>${fmt(best.swing)} toward ${best.swing > 0 ? 'R' : 'D'}</span></div>
+      <div class="tr"><span>Counted</span><span>${best.reporting.toFixed(0)}%</span></div>`);
+  });
+  svg.addEventListener('mouseleave', () => { hl.setAttribute('opacity', '0'); hideTip(); });
+
+  let tw = 0, tn = 0;
+  for (const p of pts) { const w = p.votes || 1; tw += w; tn += p.swing * w; }
+  const trend = Math.abs(slope) < 0.015
+    ? 'close to uniform across the partisan spectrum'
+    : slope > 0
+      ? `${(slope * 10).toFixed(1)} pts more Republican for every 10 points redder the district was`
+      : `${(Math.abs(slope) * 10).toFixed(1)} pts more Democratic for every 10 points redder the district was`;
+  const nrd = pts.filter(p => p.rd).length;
+  zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
+    el('span', { html: `turnout-weighted mean swing <b>${fmt(tn / tw)}</b>` }),
+    el('span', { html: `trend (dashed): <b>${trend}</b>` }),
+    el('span', { class: 'muted', text: `${nrd} of ${pts.length} shown are redrawn (ringed)` }),
+    el('span', { class: 'muted', title: 'An unopposed 2024 race has no usable margin, so there is nothing to plot it against.', text: 'districts unopposed in 2024 are not plotted' }),
+  ]));
+}
+
+/* ============================================================
    County swing vs lean scatter
    ============================================================ */
 function renderScatter() {
@@ -3212,6 +3505,38 @@ function makeDemo() {
     });
   }
 
+  // House demo rows for all 435 districts. Without these the House tab is the
+  // one tab that cannot be rehearsed without the live feed -- no chamber count
+  // converging, no flip list, no scatter -- which is also why the district
+  // scatter below had nothing to draw. Built off the 2024 margin restated on
+  // each district's current boundaries, the same baseline the scatter plots
+  // against, with a lean-dependent tilt so the cloud has a real trend in it
+  // rather than a shapeless blob.
+  //
+  // Candidates are deliberately generic. house2024 carries the 2024 winner's
+  // name and putting it on a synthetic 2026 result would read as a real
+  // candidate on a real-looking margin.
+  for (const [dist, h] of Object.entries(DATA.house2024)) {
+    const rd = DATA.redistricted[dist];
+    const base = house2024Adjusted(dist, h) ?? (rd ? rd.pres : DATA.trump2024ByCd[dist]);
+    if (!Number.isFinite(base)) continue;
+    const truth = base + NAT_SWING + (-0.05 * base) + gauss() * 3;
+    const rep = Math.min(100, Math.max(0, 62 + gauss() * 34));
+    if (rep < 1) continue;
+    const observed = truth + (rep < 100 ? gauss() * 5 * (1 - rep / 100) : 0);
+    const counted = (210_000 + rnd() * 160_000) * rep / 100;
+    const lead = counted * (1 + observed / 100) / 2;
+    live.set(`house/${dist}`, {
+      margin: +observed.toFixed(2), reporting: +rep.toFixed(1),
+      total: Math.round(counted), twoSum: Math.round(counted),
+      candidates: [
+        { name: 'Republican', party: 'R', votes: Math.round(lead), pct: 0, winner: rep > 97 && observed > 0 },
+        { name: 'Democrat', party: 'D', votes: Math.round(counted - lead), pct: 0, winner: rep > 97 && observed < 0 },
+      ].sort((a, b) => b.votes - a.votes),
+      called: rep > 97, calledFor: observed > 0 ? 'R' : 'D', raceId: null, source: 'demo',
+    });
+  }
+
   return { polling, live, counties };
 }
 
@@ -3309,6 +3634,8 @@ function renderAll() {
     renderScatter();
   } else if (tab === 'house') {
     renderHouse(house);
+    renderMapEffect();
+    renderHouseScatter();
   } else if (tab === 'gov') {
     renderGovernor(gov);
   }
@@ -3381,6 +3708,8 @@ function init() {
   $('#envgen').addEventListener('change', () => renderAll());
   $('#scattermin').addEventListener('change', renderScatter);
   $('#scatterbase').addEventListener('change', renderScatter);
+  $('#hscattermin').addEventListener('change', renderHouseScatter);
+  $('#mapeffectscope').addEventListener('change', renderMapEffect);
   $('#statebtn').addEventListener('click', (e) => {
     e.stopPropagation();
     const p = $('#statepanel');

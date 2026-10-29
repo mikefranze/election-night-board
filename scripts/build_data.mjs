@@ -39,10 +39,13 @@ const trump2024National = +twoParty(natAgg.g, natAgg.d).toFixed(2);
 /* ---------- 2. 2024 presidential by congressional district ---------- */
 const presCd = parseDelimited(R('data/raw_pres2024/pres_by_cd_2024.csv'), ',');
 const trump2024ByCd = {};
+const votes2024ByCd = {};
 for (const r of presCd) {
   const cd = String(r.CD || '').trim();
   if (!/^[A-Z]{2}-/.test(cd)) continue;
   const [po, d] = cd.split('-');
+  const tot = num(r.Total);
+  if (Number.isFinite(tot) && tot > 0) votes2024ByCd[distKey(po, d)] = tot;
   const t = num(r.Trump), h = num(r.Harris);
   const tp = (Number.isFinite(t) && Number.isFinite(h)) ? twoParty(t, h) : null;
   if (tp === null) {
@@ -53,6 +56,30 @@ for (const r of presCd) {
     continue;
   }
   trump2024ByCd[distKey(po, d)] = +tp.toFixed(2);
+}
+
+/* ---------- 2a. National House vote by year ----------
+   Measured with exactly the filters the 2024 anchor uses below - general
+   elections, real states, no delegates - so a historical year and the anchor
+   are the same quantity and 1976..2024 can be marked on the same dial axis the
+   map-effect panel draws. 2024 here must equal house2024National; the build
+   asserts it rather than trusting it. */
+const houseNationalByYear = {};
+{
+  const agg = new Map();
+  for (const r of parseDelimited(R('data/raw_medsl/house_1976_2024.tsv'), ',')) {
+    if (!isGeneral(r) || !STATES[r.state_po] || r.state_po === 'DC') continue;
+    const y = Number(r.year);
+    if (!Number.isFinite(y)) continue;
+    const p = String(r.party || '').toUpperCase();
+    const v = num(r.candidatevotes) || 0;
+    const a = agg.get(y) || { d: 0, r: 0 };
+    if (p === 'DEMOCRAT') a.d += v; else if (p === 'REPUBLICAN') a.r += v;
+    agg.set(y, a);
+  }
+  for (const [y, a] of [...agg].sort((x, z) => x[0] - z[0])) {
+    if (a.d + a.r > 0) houseNationalByYear[y] = +(((a.r - a.d) / (a.r + a.d)) * 100).toFixed(2);
+  }
 }
 
 /* ---------- 2b. County-level 2020 Senate, as an alternate scatter baseline ----------
@@ -385,6 +412,8 @@ const out = {
   stateNames: STATES,
   trump2024ByState,
   trump2024ByCd,
+  votes2024ByCd,
+  houseNationalByYear,
   redistricted,
   counties,
   senatePrevByCounty,
@@ -403,6 +432,7 @@ out.meta.counts = {
   counties: Object.keys(counties).length,
   cds: Object.keys(trump2024ByCd).length,
   redrawnCds: Object.keys(redistricted).length,
+  houseYears: Object.keys(houseNationalByYear).length,
   houseDistrictsWith2024: Object.keys(house2024).length,
   houseWatch: houseWatch.length,
   pollingRows: Object.keys(polling).length,
@@ -417,6 +447,9 @@ fs.writeFileSync(R('build/warnings.txt'), warn.join('\n') + '\n');
 console.log(JSON.stringify(out.meta.counts, null, 2));
 console.log(`\nnational 2024 Trump two-party margin: ${trump2024National}`);
 console.log(`national 2024 House  two-party margin: ${house2024National}`);
+if (houseNationalByYear[2024] !== house2024National) {
+  throw new Error(`by-year 2024 (${houseNationalByYear[2024]}) disagrees with the anchor (${house2024National}); the two are not measuring the same thing`);
+}
 console.log(`data.json: ${(fs.statSync(R('build/data.json')).size / 1024).toFixed(0)} KB`);
 console.log('\nfirst 15 warnings:');
 console.log(warn.slice(0, 15).map(w => '  ' + w).join('\n') || '  none');

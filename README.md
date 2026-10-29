@@ -25,7 +25,7 @@ still tell you something:
 |---|---|
 | **Summary** | Projected Senate, House and governor seat counts, headline tiles, systemic polling error, feed coverage and manual overrides |
 | **Senate** | Senate map with the 51st-seat line, the full race table, county detail for a selected race, county swing-vs-lean scatter |
-| **House** | The 84-district watchlist |
+| **House** | The 84-district watchlist, what the new maps are worth across every national environment, district swing-vs-lean scatter |
 | **Governor** | All 36 governor races, with projections and county drill-down |
 
 Only the visible tab is rendered. The scatter alone can be a couple of thousand
@@ -271,6 +271,14 @@ The **Demo data** button in the header fills every race with synthetic results
 and polling averages, generated in the browser, so the whole board can be
 reviewed before real votes exist. A banner stays up the entire time it is on,
 and toggling it off clears the synthetic data and restarts the live feed.
+
+Two things had to be fixed before that claim was true. House races were never
+generated at all, so the House tab was the one tab that could not be rehearsed
+without the feed. And the calendar guard that suppresses the rehearsal feed's
+vote totals before election day was suppressing the demo's as well — the two are
+indistinguishable by their contents, so demo records are exempted by their
+`source` instead. Until that fix the Demo button did nothing whatever before
+3 November, which is the one stretch of time it exists for.
 
 Nothing synthetic is ever written to `build/data.json` or to the shipped
 `index.html` — the file ships with zero polling rows.

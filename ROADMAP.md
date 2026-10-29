@@ -328,11 +328,27 @@ be probabilities derived from *my own* σ assumptions, not a calibrated forecast
 They should be labelled as such, and `PROJ.pollSigma` is an assumption, not a
 measured constant.
 
-### 4.2 House gerrymandering tool — **L**
+### 4.2 House gerrymandering tool — **L** — *seats-votes half shipped*
 
 Quantify how much the map itself, rather than the vote, decides the chamber. All
 the inputs are already in the build: 2024 House margins for all 435 districts,
 2024 presidential margin by district, and live results as they arrive.
+
+**Shipped: "What the new maps are worth"** on the House tab. It primes all 435
+districts twice at the same dial, once on the 2024 boundaries and once on the
+2026 ones, and sweeps the dial to get a curve. Both maps go through
+`housePriorOn()` so the difference measures the boundaries and not two copies
+of a formula. It answers the seats-votes question for the specific comparison
+that matters this cycle — the maps are worth about **+8 R seats** at their peak
+near R+3, **+3** at the D+9 default, and stop paying at about **D+14.8** (the
+seven Republican-drawn states alone: peak +13, break-even D+18.5). Between
+**R+2.3 and R+0.5** the two maps seat different parties, which the chart shades.
+Every election 1976–2024 is ticked on the same axis from
+`DATA.houseNationalByYear`, so "would it take a bigger wave than has ever
+happened" is answered by looking: **none of the 25 reached the break-even.**
+
+**Still to do:** the general seats-votes curve for an arbitrary map, and the
+asymmetry measures below.
 
 Candidate measures:
 
