@@ -1769,6 +1769,43 @@ function nonRepParty(row) {
   return 'D';
 }
 
+/* Which two names the table shows before a single vote is counted.
+   The ballot comes back in an arbitrary order, so "the first two" names the
+   wrong opponent wherever more than two candidates are running. Montana listed
+   Bankhead beside a margin that is Alme against Bodnar, and Nebraska listed a
+   Legal Marijuana Now candidate instead of Osborn, who is the 0.2-point race on
+   this board. nonRepParty() already works out who the real opponent is, from
+   the polling average rather than from the ballot, so the label is built from
+   the same answer the margin is.
+
+   Two candidates or fewer, or no match on either side, falls through to ballot
+   order, so any race this cannot resolve looks exactly as it did before. The
+   order between the two kept names is the ballot's own, which is why the races
+   that were already right do not reshuffle.
+
+   This gets the right PARTY, not necessarily the right person. Idaho runs two
+   independents, Fleming and Achilles, and with no Idaho poll to go on this takes
+   whichever the ballot lists first. The feed cannot break the tie: major_candidate
+   is false on all 35 Senate races and incumbent is set on exactly one, so both
+   fields are empty rather than informative. Idaho is a safe seat and the label is
+   cosmetic there, but in a race that mattered the fix would be a poll row with an
+   explicit opponent, the same way Montana resolves it. */
+function matchupNames(row) {
+  const cands = row.candidates || [];
+  const ballot = cands.slice(0, 2).map(c => c.name);
+  if (cands.length < 3) return ballot;
+  const want = nonRepParty(row);
+  const isRep = (p) => p === 'R' || /^Republican/i.test(p || '');
+  const isOpp = want === 'D' ? (p) => p === 'D' || /^Democratic/i.test(p || '')
+              : want === 'I' ? (p) => p === 'I' || /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '')
+              : null;
+  if (!isOpp) return ballot;
+  const rep = cands.find(c => isRep(c.party));
+  const opp = cands.find(c => isOpp(c.party));
+  if (!rep || !opp) return ballot;
+  return cands.filter(c => c === rep || c === opp).map(c => c.name);
+}
+
 function simulateSenate(rows, opts = {}) {
   const draws = opts.draws ?? MC.draws;
   // The dial splits VARIANCE, not standard deviation, so the total uncertainty
@@ -2456,7 +2493,7 @@ function renderSenate(rows) {
           el('span', { text: top[0].name }),
           r.res.called ? el('span', { class: 'pill called', text: 'called', style: 'margin-left:6px' }) : null,
         ])
-      : el('td', { class: 'l muted', text: r.candidates.slice(0, 2).map(c => c.name).join(' · ') || '—' });
+      : el('td', { class: 'l muted', text: matchupNames(r).join(' · ') || '—' });
 
     const tr = el('tr', { style: 'cursor:pointer' }, [
       el('td', { class: 'l' }, [
