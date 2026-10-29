@@ -16,7 +16,7 @@ section matters if these slip.
 | # | Task | Effort | Status |
 |---|---|---|---|
 | 0.1 | **Load polling averages** into `data/polling_averages.csv` | S | **16 of 35 Senate, 18 of 36 Governor loaded** |
-| 0.2 | **Re-run `fetch_index.mjs` every few days** to see whether House generals appear upstream | S, recurring | Ongoing |
+| 0.2 | **Re-run `fetch_index.mjs` every few days** to catch upstream changes | S, recurring | Ongoing — House now **435/435** |
 | 0.3 | **Rebuild and re-push after any data edit** | S | Process |
 | 0.4 | **Rehearse the night once, end to end** | M | Not started |
 | 0.5 | **Last-known-good cache + retry backoff in the page** | M | **Done** |
@@ -28,10 +28,12 @@ section matters if these slip.
 anchor on polling at ±4.6. The 19 Senate and 18 Governor races with no row fall
 back to the national-environment prior described below, at ±8.
 
-No House rows at all, so the House seat count remains a pure "if nothing
-changed" 2024 baseline — 220 R / 215 D — and is deliberately left untouched by
-the environment dial. It is a starting point, not a forecast, and should be read
-as one.
+No House polling rows at all, so before any district reports the chamber count
+is a pure "if nothing changed" 2024 baseline — 220 R / 215 D — deliberately left
+untouched by the environment dial. It is a starting point, not a forecast. Live
+returns now land for all 435 districts, so it converges to the count as the
+night goes on; the 97-district watchlist drives the House *table*, while the
+seat total spans the full chamber.
 
 **The no-poll prior.** Nobody polls a 30-point state, so half the board has no
 average. Those races used to anchor on their 2024 presidential margin with no
@@ -296,11 +298,13 @@ design, so showing one number alone would be misleading.
 
 Carried forward from the build. These are documented rather than fixed.
 
-- **House generals are not in the feed.** 52 US House records exist upstream, 50
-  of them primaries, leaving 2 generals (a GA-13 runoff, a CA-14 special).
-  Checked without the `election_type` filter, so it is a genuine upstream gap.
-  If it never fills, the House tab shows 2024 baselines and blank live columns.
-  **The single biggest remaining risk to the project.**
+- **House generals needed the type string `House of Representatives`.** This was
+  carried for weeks as the project's single biggest risk — "52 records, 50 of
+  them primaries" — on the strength of a query that asked for `US House`. The
+  correct string returns all 435 districts; see the README for the two traps
+  that come with it. The lesson generalises: every apparent upstream gap in this
+  feed has turned out to be a wrong query string, the Governor `Statewide` one
+  included. Assume the query before the source.
 - **State SOS feeds cannot be read from a static page.** Clarity/Scytl returns
   403 with no CORS headers. The manual-override box is the only fallback — worth
   exercising during the rehearsal (0.4).

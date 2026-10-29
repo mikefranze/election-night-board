@@ -640,17 +640,39 @@ async function fetchSenate() {
   return seen;
 }
 
-/** House generals were still largely unpopulated upstream; sweep defensively. */
+/**
+ * House generals publish under the type string "House of Representatives".
+ * They are NOT under "US House", which returns only 52 records - 50 primaries
+ * plus two finished specials - and that wrong string is the entire reason this
+ * tab looked like an upstream gap. The correct string returns all 435
+ * districts, every one carrying has_breakdown, so county detail works here too.
+ *
+ * Two details keep the sweep cheap and honest:
+ *
+ *  - The current election sorts first, so every election-day record lands in
+ *    the first three pages. Stop at the first page holding none rather than
+ *    walking 41 pages of history back to 1962.
+ *
+ *  - Filter on the EXACT election date, not the year. GA-13, GA-14, NJ-11 and
+ *    TX-18 each also have a COMPLETED 2026 special election, published as
+ *    election_type "General" at 99-100% reporting with a declared winner. A
+ *    startsWith('2026') filter lets the finished special overwrite the live
+ *    November race, which would show four districts as called and fully
+ *    counted before a single real vote existed.
+ */
 async function fetchHouse() {
   const seen = new Map();
-  for (let offset = 0; offset < 1000; offset += 200) {
-    const j = await getJSON(`${API}/race/search?country=US&type=US%20House&election_type=General&limit=200&offset=${offset}`);
+  const day = DATA.meta.electionDate;
+  for (let offset = 0; offset < 1200; offset += 200) {
+    const j = await getJSON(`${API}/race/search?country=US&type=House%20of%20Representatives&election_type=General&limit=200&offset=${offset}`);
     const races = j.races || [];
+    let hits = 0;
     for (const r of races) {
-      if (!String(r.election_date || '').startsWith('2026')) continue;
+      if (!String(r.election_date || '').startsWith(day)) continue;
+      hits++;
       if (r.district) seen.set(`house/${r.district}`, r);
     }
-    if (races.length < 200) break;
+    if (races.length < 200 || hits === 0) break;
   }
   return seen;
 }

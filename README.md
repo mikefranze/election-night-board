@@ -382,13 +382,19 @@ certified results.
 
 ## Known gaps and limitations
 
-- **House races are not in the feed.** As of the last index pull the feed carries
-  52 US House records in total, 50 of them primaries, leaving 2 generals (a GA-13
-  runoff and a CA-14 special). This was checked without the `election_type`
-  filter, so it is a genuine upstream gap, not a query problem. Senate is 36/35
-  and Governor 36/36. If upstream never publishes the House generals, that tab
-  keeps showing 2024 baselines and blank live columns — the single biggest
-  remaining risk.
+- **House generals publish under `type=House of Representatives`, not
+  `US House`.** `US House` returns 52 records — 50 primaries plus two finished
+  specials — which reads as an upstream gap and was recorded as one here for
+  weeks. It was not: the correct string returns all **435 districts** for
+  3 November, each with `has_breakdown` set, so the live chamber count and
+  county detail both work. Two traps come with it. The type carries history back
+  to 1962 — 8,098 records over 41 pages — so the sweep leans on the current
+  election sorting first and stops at the first page holding none. And GA-13,
+  GA-14, NJ-11 and TX-18 each *also* have a **completed** 2026 special published
+  as `election_type: "General"` at 99–100% reporting with a declared winner, so
+  the date filter has to match the exact election day rather than the year;
+  filtering on `2026` alone lets a finished special overwrite the live race and
+  shows four districts as called before a vote is counted.
 - **Governor races use `election_type: "Statewide"`, not `"General"`.** Senate
   generals are `"General"`; filtering governors the same way returned zero and
   made the Governor tab look empty when all 36 races were in fact published.

@@ -25,6 +25,7 @@ import path from 'node:path';
 
 const API = 'https://civicapi.org/api/v2';
 const OUT = path.join(process.cwd(), 'data', 'snapshots');
+const ELECTION_DAY = '2026-11-03';
 
 const arg = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -77,18 +78,25 @@ function margin(race) {
   return { m: +m.toFixed(2), v: w.v + l.v, c: cands.some(c => c.w) };
 }
 
-async function sweepType(type, filterGeneral) {
+// `day` is matched as a prefix of election_date. Pass the full election day for
+// the House: four districts (GA-13, GA-14, NJ-11, TX-18) also carry a COMPLETED
+// 2026 special published as election_type "General" at 99-100% reporting, and a
+// bare '2026' lets the finished special overwrite the live November race.
+async function sweepType(type, filterGeneral, day = '2026') {
   const enc = encodeURIComponent(type);
   const filter = filterGeneral ? '&election_type=General' : '';
   const out = [];
   for (let offset = 0; offset < 1400; offset += 200) {
     const j = await getJSON(`${API}/race/search?country=US&type=${enc}${filter}&limit=200&offset=${offset}`);
     const races = j.races || [];
-    out.push(...races);
-    if (races.length < 200) break;
+    const keep = races.filter(r => String(r.election_date || '').startsWith(day));
+    out.push(...keep);
+    // The current election sorts first under every type swept here, so the
+    // first page with no current-election record means the rest is history.
+    if (races.length < 200 || keep.length === 0) break;
     await sleep(200);
   }
-  return out.filter(r => String(r.election_date || '').startsWith('2026'));
+  return out;
 }
 
 async function snapshot() {
@@ -99,7 +107,9 @@ async function snapshot() {
     // Governors publish as "Statewide", not "General" — filtering on General
     // returns almost nothing, which is how the Governor tab looked empty for days.
     sweepType('Governor', false).catch(() => []),
-    sweepType('US House', true).catch(() => []),
+    // "US House" returns 52 records, 50 of them primaries. The federal House
+    // publishes under "House of Representatives" - all 435 districts.
+    sweepType('House of Representatives', true, ELECTION_DAY).catch(() => []),
   ]);
   for (const r of sen) {
     if (!r.province || r.province === 'US') continue;

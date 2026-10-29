@@ -13,9 +13,12 @@ import path from 'node:path';
 
 const API = 'https://civicapi.org/api/v2';
 const OUT = path.join(process.cwd(), 'data', 'raw_civicapi');
+// Match the exact election day, not the year: several districts also carry
+// completed 2026 special elections published as election_type "General".
+const DAY = '2026-11-03';
 const TYPES = [
   ['US Senate', 'senate_generals.ndjson'],
-  ['US House', 'house_generals.ndjson'],
+  ['House of Representatives', 'house_generals.ndjson'],
   ['Governor', 'gov_generals.ndjson'],
 ];
 
@@ -50,7 +53,7 @@ async function sweep(type, file) {
     const races = all.filter(keep);
     lines.push(JSON.stringify({ races }));
     total += races.length;
-    y2026 += races.filter(r => String(r.election_date || '').startsWith('2026')).length;
+    y2026 += races.filter(r => String(r.election_date || '').startsWith(DAY)).length;
     if (all.length < 200) break;
     await sleep(250);         // be polite: their cache-control is max-age=15
   }
@@ -78,7 +81,7 @@ async function collectPollTimes() {
       let races = [];
       try { races = JSON.parse(t).races || []; } catch { continue; }
       for (const r of races) {
-        if (!String(r.election_date || '').startsWith('2026')) continue;
+        if (!String(r.election_date || '').startsWith(DAY)) continue;
         if (!r.province || r.province === 'US') continue;
         if (type === 'Governor' && !/^(Statewide|General)$/i.test(r.election_type || '')) continue;
         if (type !== 'Governor' && !/^General$/i.test(r.election_type || '')) continue;
@@ -106,7 +109,7 @@ await collectPollTimes();
 
 console.log('\n2026 general coverage upstream:');
 for (const [type, n] of Object.entries(counts)) {
-  const expect = type === 'US House' ? 435 : type === 'US Senate' ? 35 : 36;
+  const expect = type === 'House of Representatives' ? 435 : type === 'US Senate' ? 35 : 36;
   const pct = Math.round((n / expect) * 100);
   console.log(`  ${type.padEnd(10)} ${String(n).padStart(4)} / ~${expect}  (${pct}%)${pct < 50 ? '   <-- still sparse upstream' : ''}`);
 }
