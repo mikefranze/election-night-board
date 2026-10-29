@@ -26,38 +26,62 @@
 # 2022 and this file said D, but the 2026 ballot carries him as an Independent
 # and the feed's roster for the race is just those two names. Checked against the
 # roster rather than from memory, which is the only way this column stays right.
-race_key,margin,source,as_of,opponent
-senate/AK,-2.0,poll avg; Sullivan 47.7 / Peltola 49.7,2026-10-29,D
-senate/FL,6.4,poll avg; Moody 49.9 / Nixon 43.5,2026-10-29,D
-senate/GA,-10.2,poll avg; Collins 42.4 / Ossoff 52.6,2026-10-29,D
-senate/IA,-0.5,poll avg; Hinson 45.5 / Turek 46.0,2026-10-29,D
-senate/KS,-1.5,poll avg; Marshall 45.4 / Hamilton 46.9,2026-10-29,D
-senate/ME,-3.2,poll avg; Collins 46.2 / Jackson 49.4,2026-10-29,D
-senate/MI,-4.4,poll avg; Rogers 44.5 / El-Sayed 48.9,2026-10-29,D
-senate/MN,-7.3,poll avg; Tafoya 42.2 / Flanagan 49.5,2026-10-29,D
-senate/MT,8.3,poll avg; Alme (R) 41.4 / Bodnar (I) 33.1 / Bankhead (D) 15.2,2026-10-29,I
-senate/NE,0.2,poll avg; Ricketts 46.4 / Osborn (I) 46.2,2026-10-29,I
-senate/NH,-6.8,poll avg; Sununu 42.7 / Pappas 49.5,2026-10-29,D
-senate/NC,-10.2,poll avg; Whatley 41.6 / Cooper 51.8,2026-10-29,D
-senate/OH,-3.3,poll avg; Husted 44.7 / Brown 48.0,2026-10-29,D
-senate/SC,0.8,poll avg; Graham Nordone 45.5 / Andrews 44.7,2026-10-29,D
-senate/SD,13.1,poll avg; Rounds 54.0 / Bengs (I) 40.9,2026-10-29,I
-senate/TX,-3.5,poll avg; Paxton 45.6 / Talarico 49.1,2026-10-29,D
-gov/AZ,-8.0,poll avg; Biggs 41.6 / Hobbs 49.6,2026-10-28,D
-gov/CA,-21.9,poll avg; Hilton 36.1 / Becerra 58.0,2026-10-28,D
-gov/CT,-18.5,poll avg; Fazio 36.4 / Lamont 54.9,2026-10-28,D
-gov/FL,4.8,poll avg; Donalds 48.8 / Jolly 44.0,2026-10-28,D
-gov/GA,0.0,poll avg; Jackson 48.0 / Bottoms 48.0,2026-10-28,D
-gov/IA,-7.1,poll avg; Lahn 44.0 / Sand 51.1,2026-10-28,D
-gov/KS,3.2,poll avg; Masterson 48.2 / Holscher 45.0,2026-10-28,D
-gov/ME,-10.2,poll avg; Charles 39.4 / Pingree 49.6 / Bennett 7.1,2026-10-28,D
-gov/MI,-7.2,poll avg; James 42.7 / Benson 49.9,2026-10-28,D
-gov/MN,-12.3,poll avg; Demuth 39.5 / Klobuchar 51.8,2026-10-28,D
-gov/NE,3.5,poll avg; Pillen 44.2 / Walz 40.7,2026-10-28,D
-gov/NV,-0.9,poll avg; Lombardo 44.7 / Ford 45.6,2026-10-28,D
-gov/NH,9.7,poll avg; Ayotte 50.8 / Warmington 41.1,2026-10-28,D
-gov/NY,-13.3,poll avg; Blakeman 40.9 / Hochul 54.2,2026-10-28,D
-gov/OH,-3.0,poll avg; Ramaswamy 45.2 / Acton 48.2,2026-10-28,D
-gov/PA,-22.9,poll avg; Garrity 34.6 / Shapiro 57.5,2026-10-28,D
-gov/TX,2.7,poll avg; Abbott 49.5 / Hinojosa 46.8,2026-10-28,D
-gov/WI,-3.9,poll avg; Tiffany 43.3 / Crowley 47.2,2026-10-28,D
+#
+# `rep_candidate` and `opp_candidate` name the two people the margin is between,
+# spelled exactly as the feed's roster spells them. The ballot order cannot be
+# used for this. Alaska lists three Republicans and Dan Sullivan is the third of
+# them, so "the first Republican on the ballot" is Gerald L. Heikes, who is not
+# who any of these averages are about. Minnesota lists an independent and a
+# Libertarian ahead of both major candidates.
+#
+# The build checks every value: the name must appear in that race's roster, the
+# rep must be a Republican, the two must be different people, and the opponent's
+# party must equal the `opponent` column above. Any of those failing stops the
+# build with the race named. That is the point of spelling them out - a column
+# nothing verifies is worth no more than the guess it replaced.
+#
+# One judgement call is recorded here rather than hidden in a heuristic: Alaska's
+# ballot carries both "Dan Sullivan" and "Daniel J. Jr. Sullivan", and this names
+# the first as the incumbent the averages refer to. If that is the wrong one, this
+# is the single line to change.
+#
+# Blank for the Governor rows. Those have no roster in the build to check against
+# and no pre-vote matchup cell to label, so there is nothing for the columns to do.
+#
+# Names here must not contain a comma - the reader splits on commas and does not
+# handle quoted fields.
+race_key,margin,source,as_of,opponent,rep_candidate,opp_candidate
+senate/AK,-2.0,poll avg; Sullivan 47.7 / Peltola 49.7,2026-10-29,D,Dan Sullivan,Mary Peltola
+senate/FL,6.4,poll avg; Moody 49.9 / Nixon 43.5,2026-10-29,D,Ashley Moody,Angie Nixon
+senate/GA,-10.2,poll avg; Collins 42.4 / Ossoff 52.6,2026-10-29,D,Mike Collins,Jon Ossoff
+senate/IA,-0.5,poll avg; Hinson 45.5 / Turek 46.0,2026-10-29,D,Ashley Hinson,Josh Turek
+senate/KS,-1.5,poll avg; Marshall 45.4 / Hamilton 46.9,2026-10-29,D,Roger Marshall,Adam Hamilton
+senate/ME,-3.2,poll avg; Collins 46.2 / Jackson 49.4,2026-10-29,D,Susan Collins,Troy Jackson
+senate/MI,-4.4,poll avg; Rogers 44.5 / El-Sayed 48.9,2026-10-29,D,Mike Rogers,Abdul El-Sayed
+senate/MN,-7.3,poll avg; Tafoya 42.2 / Flanagan 49.5,2026-10-29,D,Michele Tafoya,Peggy Flanagan
+senate/MT,8.3,poll avg; Alme (R) 41.4 / Bodnar (I) 33.1 / Bankhead (D) 15.2,2026-10-29,I,Kurt Alme,Seth Bodnar
+senate/NE,0.2,poll avg; Ricketts 46.4 / Osborn (I) 46.2,2026-10-29,I,Pete Ricketts,Dan Osborn
+senate/NH,-6.8,poll avg; Sununu 42.7 / Pappas 49.5,2026-10-29,D,John E. Sununu,Chris Pappas
+senate/NC,-10.2,poll avg; Whatley 41.6 / Cooper 51.8,2026-10-29,D,Michael Whatley,Roy Cooper
+senate/OH,-3.3,poll avg; Husted 44.7 / Brown 48.0,2026-10-29,D,Jon Husted,Sherrod Brown
+senate/SC,0.8,poll avg; Graham Nordone 45.5 / Andrews 44.7,2026-10-29,D,Darline Graham,Annie Andrews
+senate/SD,13.1,poll avg; Rounds 54.0 / Bengs (I) 40.9,2026-10-29,I,Mike Rounds,Brian Bengs
+senate/TX,-3.5,poll avg; Paxton 45.6 / Talarico 49.1,2026-10-29,D,Ken Paxton,James Talarico
+gov/AZ,-8.0,poll avg; Biggs 41.6 / Hobbs 49.6,2026-10-28,D,,
+gov/CA,-21.9,poll avg; Hilton 36.1 / Becerra 58.0,2026-10-28,D,,
+gov/CT,-18.5,poll avg; Fazio 36.4 / Lamont 54.9,2026-10-28,D,,
+gov/FL,4.8,poll avg; Donalds 48.8 / Jolly 44.0,2026-10-28,D,,
+gov/GA,0.0,poll avg; Jackson 48.0 / Bottoms 48.0,2026-10-28,D,,
+gov/IA,-7.1,poll avg; Lahn 44.0 / Sand 51.1,2026-10-28,D,,
+gov/KS,3.2,poll avg; Masterson 48.2 / Holscher 45.0,2026-10-28,D,,
+gov/ME,-10.2,poll avg; Charles 39.4 / Pingree 49.6 / Bennett 7.1,2026-10-28,D,,
+gov/MI,-7.2,poll avg; James 42.7 / Benson 49.9,2026-10-28,D,,
+gov/MN,-12.3,poll avg; Demuth 39.5 / Klobuchar 51.8,2026-10-28,D,,
+gov/NE,3.5,poll avg; Pillen 44.2 / Walz 40.7,2026-10-28,D,,
+gov/NV,-0.9,poll avg; Lombardo 44.7 / Ford 45.6,2026-10-28,D,,
+gov/NH,9.7,poll avg; Ayotte 50.8 / Warmington 41.1,2026-10-28,D,,
+gov/NY,-13.3,poll avg; Blakeman 40.9 / Hochul 54.2,2026-10-28,D,,
+gov/OH,-3.0,poll avg; Ramaswamy 45.2 / Acton 48.2,2026-10-28,D,,
+gov/PA,-22.9,poll avg; Garrity 34.6 / Shapiro 57.5,2026-10-28,D,,
+gov/TX,2.7,poll avg; Abbott 49.5 / Hinojosa 46.8,2026-10-28,D,,
+gov/WI,-3.9,poll avg; Tiffany 43.3 / Crowley 47.2,2026-10-28,D,,

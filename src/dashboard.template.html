@@ -1769,41 +1769,62 @@ function nonRepParty(row) {
   return 'D';
 }
 
-/* Which two names the table shows before a single vote is counted.
-   The ballot comes back in an arbitrary order, so "the first two" names the
-   wrong opponent wherever more than two candidates are running. Montana listed
-   Bankhead beside a margin that is Alme against Bodnar, and Nebraska listed a
-   Legal Marijuana Now candidate instead of Osborn, who is the 0.2-point race on
-   this board. nonRepParty() already works out who the real opponent is, from
-   the polling average rather than from the ballot, so the label is built from
-   the same answer the margin is.
+/* The two candidates a race is actually between, as objects from the ballot.
+   One function for it, because the table label and the demo generator both need
+   this answer and had already drifted into giving different ones.
 
-   Two candidates or fewer, or no match on either side, falls through to ballot
-   order, so any race this cannot resolve looks exactly as it did before. The
-   order between the two kept names is the ballot's own, which is why the races
-   that were already right do not reshuffle.
+   Named first, resolved second.
 
-   This gets the right PARTY, not necessarily the right person. Idaho runs two
-   independents, Fleming and Achilles, and with no Idaho poll to go on this takes
-   whichever the ballot lists first. The feed cannot break the tie: major_candidate
-   is false on all 35 Senate races and incumbent is set on exactly one, so both
-   fields are empty rather than informative. Idaho is a safe seat and the label is
-   cosmetic there, but in a race that mattered the fix would be a poll row with an
-   explicit opponent, the same way Montana resolves it. */
-function matchupNames(row) {
+   1. polling_averages.csv names both people in rep_candidate / opp_candidate,
+      and the build checks each name against the feed's roster for that race, so
+      where a row exists this is a lookup rather than a guess. Alaska is the case
+      that forced it: three Republicans are on the ballot and Dan Sullivan is the
+      third of them, so no rule about ballot order ever reaches him, and the
+      board spent a while showing a Gerald L. Heikes vs Peltola race.
+
+   2. With no names, party still beats ballot order: nonRepParty() resolves who
+      the opponent is from the polling average, which is how Montana's Bodnar is
+      found instead of Bankhead. This gets the right party, not always the right
+      person - Idaho runs two independents and with no Idaho poll this takes
+      whichever the ballot lists first. The feed cannot break that tie, since
+      major_candidate is false on all 35 Senate races and incumbent is set on
+      exactly one. A poll row naming both candidates is the fix if it ever
+      matters there.
+
+   Returns null when neither route resolves, and callers fall back to ballot
+   order for that. A name that no longer matches the roster falls through to (2)
+   rather than failing, so a bundle outliving a roster respelling degrades to the
+   old behaviour instead of showing nothing. */
+function contenders(row) {
   const cands = row.candidates || [];
-  const ballot = cands.slice(0, 2).map(c => c.name);
-  if (cands.length < 3) return ballot;
+  if (!cands.length) return null;
+  const poll = row.poll || null;
+
+  if (poll && poll.repCandidate && poll.oppCandidate) {
+    const rep = cands.find(c => c.name === poll.repCandidate);
+    const opp = cands.find(c => c.name === poll.oppCandidate);
+    if (rep && opp && rep !== opp) return { rep, opp, by: 'named' };
+  }
+
   const want = nonRepParty(row);
   const isRep = (p) => p === 'R' || /^Republican/i.test(p || '');
   const isOpp = want === 'D' ? (p) => p === 'D' || /^Democratic/i.test(p || '')
               : want === 'I' ? (p) => p === 'I' || /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '')
               : null;
-  if (!isOpp) return ballot;
+  if (!isOpp) return null;
   const rep = cands.find(c => isRep(c.party));
   const opp = cands.find(c => isOpp(c.party));
-  if (!rep || !opp) return ballot;
-  return cands.filter(c => c === rep || c === opp).map(c => c.name);
+  return (rep && opp && rep !== opp) ? { rep, opp, by: 'party' } : null;
+}
+
+/* Which two names the table shows before a single vote is counted. The order
+   between the two is the ballot's own, so the rows that were already right do
+   not reshuffle, and an unresolvable race keeps ballot order exactly as before. */
+function matchupNames(row) {
+  const cands = row.candidates || [];
+  const c = contenders(row);
+  if (!c) return cands.slice(0, 2).map(x => x.name);
+  return cands.filter(x => x === c.rep || x === c.opp).map(x => x.name);
 }
 
 function simulateSenate(rows, opts = {}) {
@@ -3471,19 +3492,22 @@ function makeDemo() {
     // A plausible polling average: 2024 baseline, national swing, incumbency-ish noise.
     const poll = base + NAT_SWING + gauss() * 2.5;
 
-    // Who the real opponent is, resolved by the same function the live board
-    // uses, so a rehearsal cannot disagree with the night about who is running.
-    // The hint has to come from the REAL DATA.polling: who the opponent is, is a
+    // Who is actually running, resolved by the same two functions the live board
+    // uses, so a rehearsal cannot disagree with the night about the matchup.
+    // The row has to be built against the REAL DATA.polling: who is running is a
     // fact about the race, not about these invented numbers, and the demo's own
-    // polling row does not exist yet. Without this the ballot heuristic takes
-    // over and prefers a Democrat wherever one is on the ballot, which put
-    // Bankhead in Montana's demo row against a margin that is Alme vs Bodnar.
-    const oppParty = nonRepParty({
+    // polling row does not exist yet. Without it the ballot heuristic takes over
+    // and prefers a Democrat wherever one is on the ballot, which put Bankhead in
+    // Montana's demo row against a margin that is Alme vs Bodnar, and Gerald L.
+    // Heikes in Alaska's against one that is Sullivan vs Peltola.
+    const preVote = {
       key: `senate/${r.state}`,
       candidates: r.candidates,
       res: null,
       poll: DATA.polling[`senate/${r.state}`] || null,
-    });
+    };
+    const pair = contenders(preVote);
+    const oppParty = nonRepParty(preVote);
     // Carried onto the synthetic row too, so every later nonRepParty() call
     // during a demo gets the same answer even in a race that draws 0% reporting
     // and so has no synthetic votes to read it off.
@@ -3498,11 +3522,8 @@ function makeDemo() {
     const total = 1_200_000 + rnd() * 2_000_000;
     const counted = total * rep / 100;
     const lead = counted * (1 + observed / 100) / 2;
-    const rc = r.candidates.find(c => c.party === 'Republican');
-    const isOpp = oppParty === 'I'
-      ? (p) => /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(p || '')
-      : (p) => /^Democratic/i.test(p || '');
-    const dc = r.candidates.find(c => isOpp(c.party));
+    const rc = pair ? pair.rep : r.candidates.find(c => /^Republican/i.test(c.party || ''));
+    const dc = pair ? pair.opp : null;
     live.set(`senate/${r.state}`, {
       margin: +observed.toFixed(2), reporting: +rep.toFixed(1), total: Math.round(counted),
       twoSum: Math.round(counted),

@@ -379,11 +379,57 @@ if (fs.existsSync(pollPath)) {
       // this, and neither can the candidate list where a Democrat and an
       // independent are both on the ballot (Montana).
       const opp = String(row.opponent || '').trim().toUpperCase();
+
+      // The two people the margin is between, named rather than inferred from
+      // ballot order. Alaska is why: three Republicans are on the ballot and Dan
+      // Sullivan is the third, so "the first Republican" is a candidate none of
+      // these averages is about.
+      //
+      // Every value is checked against the feed's own roster for that race, and a
+      // failure throws. A column nothing verifies would be no better than the
+      // ballot-order guess it replaces: a typo, or a name the feed later respells,
+      // would fall back silently and put the wrong person back on the board. The
+      // error names the race and lists the roster, so fixing it is one edit.
+      const repName = String(row.rep_candidate || '').trim();
+      const oppName = String(row.opp_candidate || '').trim();
+      const race = k.startsWith('senate/') ? senate2026.find(x => `senate/${x.state}` === k) : null;
+      if (repName || oppName) {
+        if (!race) {
+          throw new Error(`${k}: rep_candidate/opp_candidate given, but the build has no candidate roster for that race to check them against. Only senate/<ST> rows have one.`);
+        }
+        const roster = race.candidates || [];
+        const show = () => roster.map(c => `${JSON.stringify(c.name)} [${c.party}]`).join(', ') || '(empty)';
+        if (!repName || !oppName) {
+          throw new Error(`${k}: name both rep_candidate and opp_candidate, or neither. Roster: ${show()}`);
+        }
+        const rc = roster.find(c => c.name === repName);
+        const oc = roster.find(c => c.name === oppName);
+        if (!rc) throw new Error(`${k}: rep_candidate ${JSON.stringify(repName)} is not on that race's roster. Roster: ${show()}`);
+        if (!oc) throw new Error(`${k}: opp_candidate ${JSON.stringify(oppName)} is not on that race's roster. Roster: ${show()}`);
+        if (rc === oc) throw new Error(`${k}: rep_candidate and opp_candidate are the same person (${JSON.stringify(repName)}).`);
+        if (!/^Republican/i.test(rc.party || '')) {
+          throw new Error(`${k}: rep_candidate ${JSON.stringify(repName)} is listed as ${JSON.stringify(rc.party)}, not Republican.`);
+        }
+        // The opponent's party and the `opponent` column have to agree. They are
+        // two statements of the same fact, and the board reads both - the letter
+        // for attributing the seat, the name for labelling the row.
+        const letter = /^Democratic/i.test(oc.party || '') ? 'D'
+          : /^(Independent|Nonpartisan|Unaffiliated|Undeclared)/i.test(oc.party || '') ? 'I'
+          : /^Republican/i.test(oc.party || '') ? 'R' : null;
+        if (letter !== opp) {
+          throw new Error(`${k}: opp_candidate ${JSON.stringify(oppName)} is ${JSON.stringify(oc.party)} (=${letter}), but the opponent column says ${JSON.stringify(opp)}. One of the two is wrong.`);
+        }
+      } else if (race) {
+        warn.push(`${k}: no rep_candidate/opp_candidate, so the pre-vote matchup falls back to ballot order`);
+      }
+
       polling[k] = {
         margin: m,
         source: String(row.source || '').trim() || 'unspecified',
         asOf: String(row.as_of || '').trim(),
         opponent: /^[DIR]$/.test(opp) ? opp : null,
+        repCandidate: repName || null,
+        oppCandidate: oppName || null,
       };
     }
     fs.unlinkSync(tmp);

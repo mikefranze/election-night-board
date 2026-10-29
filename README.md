@@ -123,15 +123,27 @@ you will know whether the House and Governor gaps below have closed.
 Add rows and re-run `build_data.mjs` + `bundle.mjs`:
 
 ```csv
-race_key,margin,source,as_of
-senate/GA,-1.4,FiftyPlusOne,2026-10-28
-senate/NC,0.8,FiftyPlusOne,2026-10-28
-generic/national,-6.2,FiftyPlusOne,2026-10-28
+race_key,margin,source,as_of,opponent,rep_candidate,opp_candidate
+senate/GA,-10.2,FiftyPlusOne,2026-10-29,D,Mike Collins,Jon Ossoff
+senate/MT,8.3,FiftyPlusOne,2026-10-29,I,Kurt Alme,Seth Bodnar
+generic/national,-9.0,FiftyPlusOne,2026-10-29,D,,
 ```
 
 `margin` is **Republican minus Democrat** in points: `R+3` → `3`, `D+3` → `-3`.
 Keys are `senate/<ST>`, `gov/<ST>`, `house/<ST>-<DD>`, `generic/national`.
 The `source` string is shown in the UI so you can see where each number came from.
+
+`opponent` is the party of the leading non-Republican — `D`, `I` or `R`. It cannot
+be derived from the sign of the margin, and it is not always the Democrat: see
+[Naming the opponent](#naming-the-opponent) below.
+
+`rep_candidate` and `opp_candidate` name the two people the margin is between,
+spelled exactly as the feed's roster spells them. **The build verifies every
+value** — each name must be on that race's roster, the first must be a Republican,
+the two must differ, and the opponent's party must equal the `opponent` column.
+Any of those failing stops the build and names the race. Leave both blank where
+you have no roster to check against, such as the Governor rows; the build warns
+and the label falls back to ballot order.
 
 The intended source is **FiftyPlusOne** (founded by FiveThirtyEight alumni), which
 has a CSV API at `https://fiftyplusone.news/api/csv?api_key=<KEY>&filename=<DATASET>`.
@@ -191,9 +203,10 @@ race is selected. With no polling average loaded, the prior falls back to the
 Control is counted from the projected margin's sign, so any non-Republican win
 goes into the Democratic bloc: seat totals, the net flip count and the Monte
 Carlo all apply the same rule, and an R-to-I flip reads as a Democratic gain of
-one. Three races on this board have an independent as the leading
-non-Republican — **Nebraska** (Osborn), **Montana** (Bodnar) and **Idaho**,
-where no Democrat is on the ballot at all.
+one. Four races on this board have an independent as the leading
+non-Republican — **Nebraska** (Osborn), **Montana** (Bodnar), **South Dakota**
+(Bengs, who ran as a Democrat in 2022 but is on the 2026 ballot as an
+independent) and **Idaho**, where no Democrat is on the ballot at all.
 
 This is an assumption and the data cannot settle it. Osborn has said he would
 caucus with neither party. So rather than bury it, the Monte Carlo reports the
@@ -201,10 +214,32 @@ share of runs in which the majority actually *depends* on an independent
 joining; it appears beneath the chance-of-control tiles whenever it clears half
 a percent. If it is large on the night, read the seat total with that in mind.
 
-Which non-Republican is the real opponent cannot be read off the ballot: Montana
-has both a Democrat and an independent running, and it is the independent
-polling second. The `opponent` column in `data/polling_averages.csv` records it
-per race, and is consulted after any counted votes but ahead of guesswork.
+## Naming the opponent
+
+Nothing about the matchup can be read off the ballot, which the feed returns in
+an arbitrary order.
+
+**Which party is the opponent** is not always the Democrat. Four races run an
+independent as the leading non-Republican, and in Montana both a Democrat and an
+independent are on the ballot with the independent polling 17.9 points ahead of
+her. The `opponent` column records it for the three that have a polling row;
+Idaho has none and falls back to party, which lands on independent because no
+Democrat filed. The column is consulted after any counted votes but ahead of
+guesswork.
+
+**Which people** is a separate question, and ballot order answers it wrong too.
+Alaska lists three Republicans with Dan Sullivan third, so "the first Republican"
+is a candidate none of the averages is about; Minnesota lists an independent and a
+Libertarian ahead of both major candidates. The `rep_candidate` and
+`opp_candidate` columns name them, checked against the roster at build time.
+
+One function, `contenders()`, answers both for the whole board, so the table
+label, the projection and the demo generator cannot disagree about who is running
+— which they have, in both directions. Where a race has no polling row it falls
+back to party, which is right for 19 of the 35 Senate races and gets the party
+right everywhere; it can still pick the wrong person of two same-party
+candidates, as it does between Idaho's two independents. Adding a polling row
+with both names is the fix if that ever matters.
 
 ## County swing vs lean
 
