@@ -36,19 +36,32 @@ same MEDSL rows that produce each district margin), not the presidential R+1.5;
 using the presidential figure would have left every district 1.81 points too
 Republican.
 
-**Except where the lines moved.** Nine states vote on new congressional maps on
-3 November — 115 districts, 36 of them shifted by 10 points or more. For those
-the 2024 House result measures an electorate that no longer exists, so they are
-primed instead from the 2024 presidential vote recomputed on the current lines
-(`data/redistricting_2026.csv`), and therefore swing off the presidential
-anchor. `housePrior()` is the only place that choice is made; the chamber count
-and the flip list both come through it. What those 115 lose is incumbency, which
-a House margin carries and a presidential margin does not — unavoidable, since
-the incumbency in their 2024 margin belonged to a different seat. At the D+9
-default the chamber projects **D 237 / R 198**.
+**Carried across where the lines moved.** Nine states vote on new congressional
+maps on 3 November — 115 districts, 36 of them shifted by 10 points or more.
+Those keep their 2024 House result and are moved onto the new boundaries first:
+add the **boundary delta**, the same 2024 presidential election counted on the
+new lines minus the old ones (`data/redistricting_2026.csv`). Candidates,
+turnout and environment are constant inside that subtraction, so what survives
+it is the map change alone — and the incumbency in the House result survives
+with it. Then the dial is applied as usual, off the House anchor.
+
+Replacing the House result with the presidential one outright was the first
+attempt and it discarded incumbency, which is most of the reason to use a House
+result at all: FL-09, FL-14, NC-01 and OH-09 all have Democrats who ran ahead of
+their old seat's presidential lean, worth four seats in the count. The exception
+is the **seven redrawn districts that went unopposed in 2024** — their margin is
+a ±100 placeholder, and a placeholder plus a delta is still one, so those fall
+back to the presidential vote on the new lines and swing off the presidential
+anchor. `housePrior()` is the only place any of this is decided; the chamber
+count and the flip list both come through it. At the D+9 default the chamber
+projects **D 241 / R 194**.
 
 Two properties keep it honest. Parking the dial at R+3.31 — a zero shift —
-reproduces the real 2024 chamber, 220 R / 215 D, which is the regression test.
+reproduces every unchanged district's own 2024 margin exactly, 320 of 320, which
+is the regression test. The chamber at that dial comes out **D 207 / R 228**
+rather than the real 215/220, because the 115 redrawn districts are restated on
+their current boundaries: that difference *is* the gerrymander, measured on real
+House votes.
 And the anchor and the dial are interchangeable: disagreeing with R+3.31 by a
 point is identical to moving the dial a point, so the anchor choice is not
 load-bearing.
@@ -61,14 +74,14 @@ were drawn that way.
 
 It is sensitive near the middle, and the new maps moved where the middle is. On
 the 2024 lines the chamber changed hands at about **R+2.3** on the dial, so
-Democrats could lose the national vote by two points and still take it. Primed
-from the current lines it changes hands at about **D+0.75**: they now have to win
-the national vote outright. Holding the prior basis fixed and changing only the
-boundaries, the maps are worth about **7 R seats** at the D+9 dial and about 4 at
-a neutral one — they are drawn to blunt a wave, so they pay off most in the
-environment they were built to survive. The remaining three-point move is the
-incumbency those 115 districts no longer get credited with, and the two cannot
-be separated from inside this model.
+Democrats could lose the national vote by two points and still take it. Carried
+across the new boundaries it changes hands at about **R+0.5**. Incumbency sits on
+both sides of that comparison, so the two-point move is the maps and only the
+maps.
+
+The cleanest statement of what they are worth is the zero-shift dial above:
+re-running the actual 2024 election on the 2026 boundaries gives **D 207 / R 228**
+against the real **D 215 / R 220**. Eight seats.
 
 The 22 districts uncontested in 2024 carry meaningless margins but sit far
 enough from even that no dial setting flips them.

@@ -8,10 +8,16 @@
 # electorate that no longer exists. Nine states vote on new lines on 2026-11-03,
 # which is 115 districts, 36 of them moved by 10 points or more.
 #
-# pres_2026_lines is the 2024 presidential vote recomputed on the lines actually
-# in use, so it is the only 2024 number for these districts that compares like
-# with like. pres_2024_lines is the same quantity on the old lines and is kept
-# only so the shift can be audited; nothing reads it.
+# WHAT IS ACTUALLY USED IS THE DIFFERENCE between the two columns. The same
+# 2024 presidential election counted on the new lines minus the old ones holds
+# candidates, turnout and national environment constant, so what survives the
+# subtraction is the boundary move and nothing else. That delta is added to the
+# district's 2024 HOUSE result, which keeps the incumbency a presidential figure
+# cannot carry. Neither column is a prior on its own.
+#
+# The one exception is a district that went unopposed in 2024: its House margin
+# is a placeholder, a placeholder plus a delta is still a placeholder, and those
+# seven fall back to pres_2026_lines alone.
 #
 # A district whose lines did not change is NOT listed here and keeps the 2024
 # House prior, which carries incumbency the presidential figure cannot.
