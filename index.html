@@ -95,16 +95,19 @@ section { margin-bottom: 22px; }
 .seatbar span { border-radius: 2px; }
 
 /* ---- tables ---- */
-/* .scroll lets a wide table scroll sideways on a narrow screen. The catch:
-   overflow-x:auto forces overflow-y from visible to AUTO, so this box becomes a
-   scroll container — and a sticky th then resolves against IT rather than the
-   viewport. top:var(--stick) was therefore pushing every column header --stick
-   pixels DOWN INTO its own table, floating it across the middle of the rows.
+/* .scroll lets a wide table scroll sideways on a narrow screen, and that is
+   also what breaks the sticky column headers: a sticky th resolves its offset
+   against the nearest SCROLLPORT, not the viewport. Inside a .scroll box,
+   top:var(--stick) therefore means "--stick pixels down from the top of THIS
+   box", floating the column header across the middle of its own rows.
 
    The widest table (Senate, 11 columns) needs 952px and .wrap is the viewport
-   less 32px of body padding, so past ~1024px nothing needs to scroll sideways.
-   Above the breakpoint, drop the scroll container entirely and the sticky th
-   resolves against the viewport again, pinning under the page header as meant. */
+   less 32px of body padding, so past ~1024px nothing needs to scroll sideways:
+   the override below drops the scroll container and hands those tables back to
+   the viewport. It cannot help the House and county boxes, though, because they
+   set their own overflow-y — and an overflow-x of visible beside an overflow-y
+   of auto computes straight back to auto, so those two remain scrollports at
+   EVERY width. They carry .vscroll for exactly that reason; see below. */
 .scroll { overflow-x: auto; }
 @media (min-width: 1100px) { .scroll { overflow-x: visible; } }
 table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
@@ -120,6 +123,16 @@ th {
    vertically, so 0 is the only offset that leaves the header where it belongs —
    at the top of its own table. Any other value floats it over the rows. */
 @media (max-width: 1099.98px) { th { top: 0; } }
+/* A .vscroll box keeps a vertical scrollbar of its own, so it is its own
+   scrollport at every width and the override above never reaches it. The class
+   carries the overflow-y that causes that, so the two cannot drift apart: a box
+   that scrolls vertically gets .vscroll, and its header offset follows. Doing
+   this in CSS rather than by measuring at runtime is deliberate — the scrollport
+   can change without a resize event (device emulation, page zoom, a scrollbar
+   appearing), and a stale measurement puts the header back in the middle of the
+   rows. */
+.vscroll { overflow-y: auto; }
+.vscroll th { top: 0; }
 th:hover { color: var(--ink-1); }
 th[aria-sort] { color: var(--ink-1); }
 td.l, th.l { text-align: left; }
@@ -429,7 +442,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       <div class="sub">Districts within 10 points on the 2024 presidential or 2024 House margin. Selected from the data, not hand-picked.</div>
     </div>
   </div>
-  <div class="scroll" style="max-height:520px; overflow-y:auto">
+  <div class="scroll vscroll" style="max-height:520px">
     <table id="housetable"><thead></thead><tbody></tbody></table>
   </div>
 </section>
@@ -464,7 +477,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       <div id="countystats" style="margin-top:10px"></div>
     </div>
   </div>
-  <div class="scroll" style="margin-top:12px; max-height:320px; overflow-y:auto">
+  <div class="scroll vscroll" style="margin-top:12px; max-height:320px">
     <table id="countytable"><thead></thead><tbody></tbody></table>
   </div>
 </section>
