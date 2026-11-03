@@ -29,7 +29,7 @@ still tell you something:
 | **Governor** | All 36 governor races, with projections and county drill-down |
 
 Only the visible tab is rendered. The scatter alone can be a couple of thousand
-SVG nodes, and rebuilding it every 30 seconds while nobody is looking at it is
+SVG nodes, and rebuilding it on every sweep while nobody is looking at it is
 wasted work.
 
 The chosen tab is remembered in `localStorage`. Browsers block that on some
@@ -315,7 +315,7 @@ whose FIPS code was renumbered in 2015. The legend counts them.
 Two things to know about it:
 
 - **It costs one request per Senate race** (35), so it is loaded on demand with
-  the **Load all counties** button and cached, never on the 30-second refresh. A
+  the **Load all counties** button and cached, never on the automatic refresh. A
   full load takes about 7 seconds.
 - **Both axes are scaled to where the turnout is**, covering 99% of weighted
   votes, with stragglers clamped to the edge. A handful of tiny counties sit near

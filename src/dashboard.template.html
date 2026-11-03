@@ -245,8 +245,8 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
     <label class="sub">Refresh
       <select id="interval">
         <option value="0">paused</option>
-        <option value="30000" selected>30s</option>
-        <option value="60000">60s</option>
+        <option value="30000">30s</option>
+        <option value="60000" selected>60s</option>
         <option value="300000">5m</option>
       </select>
     </label>
@@ -1573,7 +1573,7 @@ const HISTORY = {
   db: null, mem: [], persistent: false, MAX_MEM: 3000,
 
   /* Off unless asked for. Recording writes a row of ~500 races to IndexedDB
-     every sweep, which at a 30-second refresh is 120 rows an hour of data
+     every sweep, which at the default 60-second refresh is 60 rows an hour of data
      nobody asked this page to keep, on a machine it cannot clean up after.
      scripts/record.mjs is the durable archive and it runs whether this tab is
      open or not, so the in-page copy earns its keep only when someone wants
@@ -3197,7 +3197,7 @@ function renderCounties() {
    All-counties loader
    ------------------------------------------------------------
    region_results only comes from the per-race endpoint, so a national county
-   view costs one request per race. That is far too heavy for the 30s refresh
+   view costs one request per race. That is far too heavy for the automatic refresh
    cycle, so it is loaded on demand and cached until reloaded.
    ============================================================ */
 async function loadAllCounties() {
@@ -3667,7 +3667,7 @@ function renderScatter() {
   if (!state.allCounties) {
     zone.replaceChildren(el('div', { class: 'warnbox', html:
       'County detail is not loaded. <b>Load all counties</b> fetches one request per Senate race '
-      + `(${DATA.senate2026.length} in total), then caches the result — it is not part of the 30-second `
+      + `(${DATA.senate2026.length} in total), then caches the result — it is not part of the automatic `
       + 'refresh. Demo data fills this in without any requests.' }));
     $('#scattercount').textContent = '';
     return;
@@ -4235,7 +4235,7 @@ function renderAll() {
   const stats = errorStats(all, threshold);
   renderTabBadges(sen, house, gov);
   // Only draw the visible tab. The scatter alone can be a couple of thousand
-  // SVG nodes, and rebuilding it every 30 seconds while nobody is looking at it
+  // SVG nodes, and rebuilding it on every sweep while nobody is looking at it
   // is pure waste.
   const tab = state.tab || 'summary';
   if (tab === 'summary') {

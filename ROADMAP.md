@@ -266,7 +266,7 @@ previous refresh in memory.
 ### 1.4 Flash changed cells — **S**
 
 Briefly highlight any table cell whose value moved since the last refresh. Makes
-a 30-second refresh legible instead of invisible.
+an automatic refresh legible instead of invisible.
 
 ### 1.5 Surface turnout vs 2024 — **S** — **Done, differently**
 
