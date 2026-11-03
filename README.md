@@ -341,9 +341,14 @@ call the difference turnout. The cost is that the Senate row is measured against
 a presidential year, so it sits far below 100% all night — every row is labelled
 with its year for that reason.
 
-**Only reporting races count, each with its own baseline.** A running total
-against the full national baseline would measure how many states had finished
-counting, not how many people voted.
+**Only races at 90% counted or better, each with its own baseline.** A running
+total against the full national baseline would measure how many states had
+finished counting, not how many people voted. The threshold is there for the
+same reason: a half-counted race brings its *whole* baseline into the
+denominator while supplying only part of its votes, which reads as collapsed
+turnout rather than unfinished counting. Texas at 1% reporting beside a
+finished Georgia dragged the Senate row from 100% to 31% before the threshold
+existed, because Texas is 69% of their combined baseline.
 
 **Both parties must be on the ballot at both ends.** Idaho runs no Democrat for
 Senate in 2026 but did in 2020; counting it would book zero Democratic votes
@@ -352,10 +357,11 @@ four Senate seats (Arkansas ran no Democrat in 2020, Wyoming carries no party
 data in the MEDSL file, and Florida and Ohio had no 2020 Senate race at all,
 their 2026 contests being specials) and 36 House districts uncontested in 2022.
 
-What it cannot do is separate low turnout from unfinished counting. A race at
-40% counted has contributed roughly 40% of the votes it eventually will, so
-every percentage climbs through the night; nothing is scaled up to guess a final
-figure. The counted column sits beside it to be read together.
+The threshold does not make the figures exact. A race at 90% still has a tenth
+of its vote outstanding, so everything here runs slightly low and keeps creeping
+up as the last precincts land; nothing is scaled up to guess a final figure. The
+counted column sits beside it to be read together, and the legend says how many
+races are counting but not yet in.
 
 Independents are counted on neither side, so in a race where one takes a large
 share both figures understate the votes actually cast.

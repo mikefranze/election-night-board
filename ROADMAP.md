@@ -218,8 +218,11 @@ Class 2 and 2022 was Class 3 — a different set of seats that happens to share
 year and sits far below 100% all night; the panel labels every row with its
 year and says why.
 
-Only races that have reported count, each carrying its own baseline, and a race
-is dropped unless both parties are on the ballot at both ends. Four Senate
+A race joins at **90% counted**, carrying its own baseline, and is dropped
+unless both parties are on the ballot at both ends. The threshold matters more
+than it sounds: below it a race contributes its whole baseline to the
+denominator and only part of its votes to the numerator, which looks like
+turnout collapsing rather than counting continuing. Four Senate
 races have no usable 2020 baseline (Arkansas ran no Democrat; Wyoming carries
 no party data in MEDSL; Florida and Ohio had no 2020 race, their 2026 contests
 being specials), as do 36 House districts that went uncontested in 2022.
