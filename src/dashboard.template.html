@@ -245,6 +245,8 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   </div>
 </header>
 
+<div id="feedtestbanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--critical)" hidden></div>
+
 <div id="testbanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--critical)" hidden>
   <b>Showing civicAPI's test feed.</b> Before election day the feed publishes rehearsal results —
   races served fully counted, with declared winners, for an election that has not happened.
@@ -606,6 +608,9 @@ const state = {
   fetching: false,
   demo: false,
   showTest: false,
+  // What the feed says about itself: true = rehearsal, false = real,
+  // null = not known (never probed, or the probe failed). All three differ.
+  feedTest: null,
   realPolling: null,
   projection: null,
   sim: null,
@@ -769,6 +774,26 @@ async function fetchGovernor() {
   return seen;
 }
 
+/* One request that answers whether the whole feed is in rehearsal mode.
+
+   The search endpoint does not carry test_data and the per-race endpoint does,
+   so this reads it off a single race the sweep already found - the same probe
+   scripts/record.mjs has been making every 60 seconds for days, which is where
+   the record of the feed flipping comes from.
+
+   Returns null rather than false when it cannot tell: a missing or non-boolean
+   field, or a request that failed. "Unknown" and "real" are different answers
+   and isTestRecord() treats them differently. Two tries, not three, so a hard
+   outage costs the refresh a second rather than several. */
+async function probeTestData(sen) {
+  const race = [...sen.values()].find(r => r && r.id);
+  if (!race) return null;
+  try {
+    const j = await getJSON(`${API}/race/${race.id}`, 2);
+    return typeof j.test_data === 'boolean' ? j.test_data : null;
+  } catch { return null; }
+}
+
 async function refresh() {
   if (state.fetching) return;
   state.fetching = true;
@@ -779,6 +804,10 @@ async function refresh() {
       fetchHouse().catch(() => new Map()),
       fetchGovernor().catch(() => new Map()),
     ]);
+    // Ask the feed what it is before trusting a single count out of it. This
+    // gates the display and the history write below, so it has to resolve
+    // before either.
+    state.feedTest = await probeTestData(sen);
     // Build into a new map and only swap it in once the sweep succeeded, so a
     // failure leaves the last good data on screen instead of emptying the board.
     const next = new Map();
@@ -791,7 +820,10 @@ async function refresh() {
       state.lastGood = new Date();
       // Record only successful sweeps, so a failure cannot write a row of blanks
       // that would later read as every race collapsing to zero.
-      if (!state.demo) await HISTORY.append(next).catch(() => {});
+      // A rehearsal sweep must not reach IndexedDB. The display guard can be
+      // toggled off and back on; a poisoned history row cannot, and it would
+      // outlive the feed flipping back to real data.
+      if (!state.demo && state.feedTest !== true) await HISTORY.append(next).catch(() => {});
     }
     state.lastError = null;
   } catch (e) {
@@ -811,21 +843,44 @@ async function refresh() {
    Shown unguarded, the board reports invented winners as called races.
    The search endpoint — which is what the sweep uses — does NOT expose that
    flag, and fetching every race to read it would cost 70+ requests per refresh.
-   So the guard is the calendar instead: votes cannot exist before election day.
-   On election day the gate lifts and the feed is taken at face value.
+   Two independent guards, because each one alone has a hole.
+
+   1. The feed's own flag. The search endpoint the sweep uses does not expose
+      test_data, but the per-race endpoint does, and one race answers for the
+      whole feed - the flag has been uniform across races every time it has
+      been checked. So probeTestData() spends one extra request per refresh on
+      it, rather than the 500+ that re-fetching every race would cost.
+
+   2. The calendar: votes cannot exist before election day.
+
+   The calendar alone is not enough, which is why the flag was added. It
+   expires at midnight on election day and the rehearsal feed does not. At
+   06:42 UTC on 2 November - five hours before that gate lifted - the feed was
+   serving 501 of 509 races with votes, all 35 Senate races counted, 33 of them
+   called, and a chamber that is the opposite of this board's projection. It was
+   withdrawn twelve hours later, and it had flipped on and off three times in
+   the preceding three days. After midnight the calendar would have waved the
+   next flip straight through.
+
+   The flag alone is not enough either, because the probe can fail. An unknown
+   answer is not a "real feed" answer: before election day the calendar still
+   suppresses, and after it an unknown is taken at face value, because a probe
+   that 503s on election night must not blank a board full of real results.
+   Failing open is the right failure for one guard and the wrong one for the
+   other, which is the reason there are two.
    ============================================================ */
 const ELECTION_DAY_START = new Date(`${DATA.meta.electionDate}T00:00:00`);
 const beforeElectionDay = () => Date.now() < +ELECTION_DAY_START;
-/** A record holding votes before election day is the rehearsal feed, not a result. */
-/* The rehearsal feed publishes real-looking vote totals before election day, so
-   anything carrying votes this side of the date is suppressed on the calendar
-   rather than on the feed s own test_data flag, which it does not always set.
+/* Is this record the rehearsal feed rather than a result? Either guard alone is
+   enough to suppress it; see the block above for why it takes both.
 
    Demo records are exempt. They also carry votes before election day and are
    otherwise indistinguishable, but the user asked for them, they are already
    behind a banner, and without the exemption the Demo button does nothing at
    all until 3 November -- which is the one stretch of time it exists for. */
-const isTestRecord = (r) => beforeElectionDay() && !!r && r.source !== 'demo' && (r.total > 0 || r.reporting > 0);
+const isTestRecord = (r) =>
+  !!r && r.source !== 'demo' && (r.total > 0 || r.reporting > 0)
+  && (state.feedTest === true || beforeElectionDay());
 
 const EMPTY_RESULT = { margin: null, reporting: 0, total: 0, twoSum: 0,
   candidates: [], called: false, calledFor: null, source: 'suppressed', testData: true };
@@ -3457,7 +3512,8 @@ function statusText() {
   if (!state.lastFetch) return setStatus('stale', 'no data yet');
   const age = Math.round((Date.now() - state.lastFetch) / 1000);
   setStatus(age > 180 ? 'stale' : 'live',
-    `updated ${state.lastFetch.toLocaleTimeString()} (${fmtAge(age)} ago) · ${state.live.size} live race records`);
+    `updated ${state.lastFetch.toLocaleTimeString()} (${fmtAge(age)} ago) · ${state.live.size} live race records`
+    + (state.feedTest === true ? ' · feed in TEST mode' : state.feedTest === null ? ' · test_data unknown' : ''));
 }
 const fmtAge = (s) => s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`;
 
@@ -3705,6 +3761,27 @@ function renderTabBadges(sen, house, gov) {
 /* ============================================================
    Orchestration
    ============================================================ */
+/* This banner exists to explain an absence. When the probe says the feed is in
+   rehearsal mode every count below is suppressed, and with nothing on screen
+   that reads as a dead board rather than a guarded one.
+
+   Distinct from #testbanner, which covers the opposite case: the user pressing
+   Test feed to look at the rehearsal data deliberately. */
+function renderBanners() {
+  const el = $('#feedtestbanner');
+  if (!el) return;
+  const on = state.feedTest === true && !state.showTest;
+  el.hidden = !on;
+  if (!on) return;
+  const n = testRecordCount();
+  el.innerHTML =
+    `<b>civicAPI is serving its rehearsal feed right now</b> (<code>test_data: true</code>), so `
+    + (n ? `<b>${n} race${n === 1 ? '' : 's'}</b> carrying votes ${n === 1 ? 'is' : 'are'}`
+         : `any counts it carries are`)
+    + ` suppressed below. These are not real results, however complete they look. `
+    + `Press <b>Test feed</b> to inspect them anyway.`;
+}
+
 function renderAll() {
   const sen = senateRows();
   const house = houseRows();
@@ -3735,6 +3812,7 @@ function renderAll() {
   } else if (tab === 'gov') {
     renderGovernor(gov);
   }
+  renderBanners();
   statusText();
 }
 

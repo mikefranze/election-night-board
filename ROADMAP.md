@@ -396,11 +396,23 @@ Carried forward from the build. These are documented rather than fixed.
 - **Independent caucus is assumed.** Osborn in Nebraska counts as
   not-Republican; who he would actually caucus with is not in the data, and in a
   50–50 Senate that is the whole ballgame.
-- **civicAPI publishes a rehearsal feed before election day.** Every 2026 race
-  carries `test_data: true`, and many are served fully counted with a declared
-  winner. The search endpoint — which the sweep uses — does **not** expose that
-  flag, so the board guards on the calendar instead: votes cannot exist before
-  election day. The gate lifts on 3 November. The **Test feed** button shows the
+- **civicAPI publishes a rehearsal feed, and not only before election day.**
+  Every 2026 race carries `test_data: true` and many are served fully counted
+  with a declared winner. This was originally guarded on the calendar alone —
+  votes cannot exist before election day — which was wrong, because the calendar
+  expires on 3 November and the rehearsal feed does not. The recorder caught the
+  feed flipping three times in three days, and at **06:42 UTC on 2 November** it
+  was serving **501 of 509 races with votes, all 35 Senate races counted and 33
+  of them called**, giving the opposite chamber to this board's projection. Five
+  hours later the gate would have waved it through.
+  The board now reads the feed's own flag as well: the search endpoint does not
+  carry `test_data`, but the per-race endpoint does, so `probeTestData()` spends
+  one extra request per sweep on it. Either guard alone suppresses a record. A
+  probe that fails returns **null, not false** — unknown is not "real" — so the
+  calendar still covers it before election day, while after election day an
+  unknown is taken at face value rather than blanking a board of real results.
+  Rehearsal sweeps are also kept out of IndexedDB, since a poisoned history row
+  would outlive the feed flipping back. The **Test feed** button still shows the
   rehearsal data deliberately, behind a red banner.
 - **civicAPI candidate metadata has errors** (South Carolina lists "Darline
   Graham"). Margins are computed from vote totals, never names, but displayed

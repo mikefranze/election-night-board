@@ -309,10 +309,9 @@ and toggling it off clears the synthetic data and restarts the live feed.
 
 Two things had to be fixed before that claim was true. House races were never
 generated at all, so the House tab was the one tab that could not be rehearsed
-without the feed. And the calendar guard that suppresses the rehearsal feed's
-vote totals before election day was suppressing the demo's as well — the two are
-indistinguishable by their contents, so demo records are exempted by their
-`source` instead. Until that fix the Demo button did nothing whatever before
+without the feed. And the guard that suppresses the rehearsal feed's vote totals
+was suppressing the demo's as well — the two are indistinguishable by their
+contents, so demo records are exempted by their `source` instead. Until that fix the Demo button did nothing whatever before
 3 November, which is the one stretch of time it exists for.
 
 Nothing synthetic is ever written to `build/data.json` or to the shipped
