@@ -619,6 +619,14 @@ const marginLabel = (v, d = 1) => {
   if (Math.abs(v) < 0.05) return 'EVEN';
   return (v > 0 ? 'R+' : 'D+') + Math.abs(v).toFixed(d);
 };
+/* Tick label for a swing axis. The same D+/R+ idiom as every margin on the
+   board, so nobody has to hold "positive means Republican here, R+ means
+   Republican there" in their head while reading a chart.
+
+   Zero stays "0" rather than borrowing marginLabel's EVEN: on a swing axis zero
+   means the unit has not moved, which is a different statement from a tied
+   race, and the two sit on perpendicular axes of the same chart. */
+const swingTick = (v) => v === 0 ? '0' : (v > 0 ? 'R+' : 'D+') + Math.abs(v);
 const partyOf = (p) => MAJOR[p] ?? (/^(Independent|Nonpartisan|Undeclared|Unaffiliated)/i.test(p || '') ? 'I' : '3');
 const partyColor = (p) => p === 'D' ? 'var(--dem)' : p === 'R' ? 'var(--rep)'
   : p === 'I' ? 'var(--ind)' : 'var(--ink-muted)';
@@ -3202,7 +3210,7 @@ function renderHouseScatter() {
   const xs = xlim > 40 ? 20 : xlim > 20 ? 10 : 5;
   for (let v = -Math.floor(xlim / xs) * xs; v <= xlim; v += xs) {
     P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
-    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${swingTick(v)}</text>`);
   }
   const ys = ylim > 40 ? 20 : 10;
   for (let v = -Math.floor(ylim / ys) * ys; v <= ylim; v += ys) {
@@ -3348,7 +3356,7 @@ function renderGovScatter() {
   const xs = xlim > 40 ? 20 : xlim > 20 ? 10 : 5;
   for (let v = -Math.floor(xlim / xs) * xs; v <= xlim; v += xs) {
     P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
-    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${swingTick(v)}</text>`);
   }
   const ys = ylim > 40 ? 20 : 10;
   for (let v = -Math.floor(ylim / ys) * ys; v <= ylim; v += ys) {
@@ -3516,7 +3524,7 @@ function renderScatter() {
   const xs = xlim > 40 ? 20 : xlim > 20 ? 10 : 5;
   for (let v = -Math.floor(xlim / xs) * xs; v <= xlim; v += xs) {
     P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
-    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${swingTick(v)}</text>`);
   }
   const ys = ylim > 40 ? 20 : 10;
   for (let v = -Math.floor(ylim / ys) * ys; v <= ylim; v += ys) {
