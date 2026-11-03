@@ -384,8 +384,15 @@ Carried forward from the build. These are documented rather than fixed.
 - **State SOS feeds cannot be read from a static page.** Clarity/Scytl returns
   403 with no CORS headers. The manual-override box is the only fallback — worth
   exercising during the rehearsal (0.4).
-- **No gubernatorial history.** Governors compare against Trump 2024 only, and
-  governor flips are blocked (1.1).
+- **Gubernatorial history is hand-entered, not sourced.** There is no dataset
+  for it: MEDSL publishes nothing covering governors at state level across the
+  relevant years, and civicAPI carries a prior gubernatorial general for only
+  10 of the 36 states. `data/governor_prev.csv` therefore holds one person's
+  transcription of the 2022 and 2024 Wikipedia results tables. The build checks
+  its shape — all 36 states present and no extras, both finishers R or D,
+  percentages in range — but nothing can check the numbers themselves, and only
+  the Governor swing chart reads the file. Governor flips are still blocked
+  (1.1): knowing the last margin is not knowing who holds the seat now.
 - **`percent_reporting` is probably precinct-based, not vote-based.** A precinct
   can report 100% with mail outstanding, which biases both the turnout scale and
   the blend weight. Cannot be verified until real votes flow — **check this

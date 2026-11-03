@@ -155,6 +155,7 @@ svg .gridline { stroke: var(--grid); stroke-width: 1; }
 svg .zero { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
 svg .mark { stroke: var(--surface-1); stroke-width: 2; }
 svg .lbl { fill: var(--ink-2); font-size: 11px; }
+svg .gslbl { fill: var(--ink-1); font-size: 11px; font-weight: 600; }
 .tip {
   position: fixed; z-index: 60; pointer-events: none; opacity: 0;
   transition: opacity .09s; background: var(--surface-2); color: var(--ink-1);
@@ -205,6 +206,11 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   padding: 9px; box-shadow: 0 14px 40px rgba(0,0,0,.5);
 }
 .ddrow { display: flex; gap: 6px; margin-bottom: 8px; }
+.mcset { display: block; margin-bottom: 14px; cursor: pointer; }
+.mcset:last-child { margin-bottom: 2px; }
+.mcsethead { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
+.mcset input[type=range] { width: 100%; display: block; }
+.mcsetnote { display: block; font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
 .ddrow button { flex: 1; padding: 4px 6px; font-size: 12px; }
 #statelist { max-height: 272px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1px 8px; }
 #statelist label {
@@ -360,16 +366,25 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
         uncertainty. Not a calibrated forecast — it inherits whatever assumptions the projections carry.</div>
     </div>
     <div class="spacer"></div>
-    <label class="sub" title="How much of the uncertainty is a single error shared by every race, rather than independent noise. Splits variance, so the total uncertainty per race is unchanged.">
-      Systematic share
-      <input id="mcsys" type="range" min="0" max="100" step="5" value="50" style="vertical-align:middle;width:120px">
-      <b id="mcsysval">50%</b>
-    </label>
-    <label class="sub" title="The national environment, as a generic-ballot margin. Races with a polling average ignore this entirely. Races without one are anchored on their 2024 presidential margin re-centred on this number, because leaving 2024 unadjusted runs about 11 points too Republican against the states we can check. Move it to see how much of the board rests on the assumption.">
-      Environment
-      <input id="envgen" type="range" min="-20" max="10" step="0.5" value="-9" style="vertical-align:middle;width:120px">
-      <b id="envgenval">D+9</b>
-    </label>
+    <div class="dd">
+      <!-- Both dials live behind this button, but its label keeps showing where
+           they are set: these two numbers move every projection on the board,
+           and a reader who cannot see them has no way to know the board is not
+           on its defaults. -->
+      <button id="mcsetbtn" aria-expanded="false" title="The two assumptions behind these probabilities">Assumptions ▾</button>
+      <div id="mcsetpanel" class="ddpanel" style="width:300px" hidden>
+        <label class="mcset" title="How much of the uncertainty is a single error shared by every race, rather than independent noise. Splits variance, so the total uncertainty per race is unchanged.">
+          <span class="mcsethead">Systematic share <b id="mcsysval">50%</b></span>
+          <input id="mcsys" type="range" min="0" max="100" step="5" value="50">
+          <span class="mcsetnote">0% = every race errs on its own · 100% = the whole map moves together</span>
+        </label>
+        <label class="mcset" title="The national environment, as a generic-ballot margin. Races with a polling average ignore this entirely. Races without one are anchored on their 2024 presidential margin re-centred on this number, because leaving 2024 unadjusted runs about 11 points too Republican against the states we can check.">
+          <span class="mcsethead">Environment <b id="envgenval">D+9</b></span>
+          <input id="envgen" type="range" min="-20" max="10" step="0.5" value="-9">
+          <span class="mcsetnote">generic ballot · only reaches races with no polling average</span>
+        </label>
+      </div>
+    </div>
   </div>
   <div id="mczone"></div>
 </section>
@@ -497,12 +512,34 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   <div class="hrow" style="margin-bottom:8px">
     <div>
       <h2>Governors <span class="sub" id="govcount"></span></h2>
-      <div class="sub">Populated from the feed as races are published. Compared against Trump 2024 only —
-        no statewide gubernatorial-history dataset was available to build a last-race baseline.</div>
+      <div class="sub">Populated from the feed as races are published. This table compares against Trump 2024;
+        the swing chart below compares against each state&rsquo;s last governor&rsquo;s race, which is a different
+        question and often a very different number.</div>
     </div>
   </div>
   <div class="scroll"><table id="govtable"><thead></thead><tbody></tbody></table></div>
   <div id="govempty"></div>
+</section>
+
+<!-- ===== governor swing vs lean ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:8px">
+    <div>
+      <h2>Swing vs lean <span class="sub" id="gscattercount"></span></h2>
+      <div class="sub">One dot per state. Vertical axis is the margin in that state's last governor's race —
+        2022 everywhere except New Hampshire and Vermont, which elect every two years; horizontal axis is how
+        far it has moved since. Dot size is 2024 presidential turnout.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="sub">Min. counted
+      <select id="gscattermin">
+        <option value="0">0%</option><option value="25">25%</option>
+        <option value="50" selected>50%</option><option value="80">80%</option>
+        <option value="95">95%</option>
+      </select>
+    </label>
+  </div>
+  <div id="gscatterzone"></div>
 </section>
 </div>
 
@@ -2400,14 +2437,17 @@ function renderFlips(sen) {
   table.append(el('thead', {}, el('tr', {}, [
     el('th', { class: 'l', text: 'Seat' }), el('th', { class: 'l', text: '' }),
     el('th', { text: 'Change' }), el('th', { text: 'Margin' }),
-    el('th', { text: 'Counted' }), el('th', { class: 'l', text: 'Previously' }),
+    el('th', { text: 'Counted' }),
   ])));
   const body = el('tbody');
   // Called flips first, then by how settled the race is.
   all.sort((a, b) => (b.called ? 1 : 0) - (a.called ? 1 : 0) || (b.reporting - a.reporting));
   for (const f of all) {
     body.append(el('tr', {}, [
-      el('td', { class: 'l', text: f.label }),
+      // The "Previously" column is gone; its text survives as a tooltip here
+      // rather than being dropped, since it is the only thing that says what the
+      // seat is being compared against.
+      el('td', { class: 'l', text: f.label, title: f.note || '' }),
       el('td', { class: 'l' }, [el('span', { class: 'pill', text: f.chamber })]),
       el('td', {}, [
         el('span', { style: `color:${partyColor(f.from)}`, text: f.from }),
@@ -2420,7 +2460,6 @@ function renderFlips(sen) {
       ]),
       marginCell(f.margin),
       el('td', { text: `${(f.reporting ?? 0).toFixed(0)}%` }),
-      el('td', { class: 'l muted', text: f.note }),
     ]));
   }
   table.append(body);
@@ -2682,8 +2721,6 @@ function renderHouse(rows) {
     { label: 'Leading', l: true },
     { label: 'Margin', key: 'live', numeric: true },
     { label: 'Counted', key: 'reporting', numeric: true },
-    { label: 'Poll avg', key: 'pollMargin', numeric: true },
-    { label: 'Error', key: 'pollError', numeric: true },
     { label: 'Trump 24', key: 'trump2024', numeric: true },
     { label: 'Swing', key: 'swing2024', numeric: true },
     { label: 'House 24', key: 'houseMargin', numeric: true },
@@ -2718,8 +2755,6 @@ function renderHouse(rows) {
         : el('td', { class: 'l muted', text: '—' }),
       marginCell(r.live),
       reportingCell(r.reporting, r.res?.source),
-      r.poll ? marginCell(r.poll.margin) : el('td', { class: 'muted', text: '—' }),
-      marginCell(r.pollError),
       Number.isFinite(r.trump2024)
         ? el('td', {
             class: 'cell-margin', style: `color:${marginColor(r.trump2024)}`,
@@ -3231,6 +3266,162 @@ function renderHouseScatter() {
     el('span', { html: `trend (dashed): <b>${trend}</b>` }),
     el('span', { class: 'muted', text: `${nrd} of ${pts.length} shown are redrawn (ringed)` }),
     el('span', { class: 'muted', title: 'An unopposed 2024 race has no usable margin, so there is nothing to plot it against.', text: 'districts unopposed in 2024 are not plotted' }),
+  ]));
+}
+
+/* ============================================================
+   Rendering — governor swing vs lean
+   ------------------------------------------------------------
+   One dot per state, not per county. The Senate chart plots counties because
+   it can: county-level Senate results exist for a prior cycle. Nothing
+   equivalent exists for governors, so this asks the state-level question
+   instead — how far has each state moved since it last elected a governor?
+
+   The baseline is that last gubernatorial race (data/governor_prev.csv), not
+   Trump 2024, which is what the Governor table still compares against. The two
+   answer different questions and the gap between them is the point: Vermont
+   voted for Phil Scott by R+54 and for Harris by D+32 in consecutive years.
+   Measuring a governor's race against a presidential one turns split-ticket
+   voting into an enormous phantom swing, every time, in the same states.
+
+   Thirty-six points is few enough to label every one, so this does. A chart
+   you have to hover to read is no use at a glance on election night.
+   ============================================================ */
+function govScatterPoints(min) {
+  const prev = DATA.govPrevByState || {};
+  const pts = [];
+  let reporting = 0, noBase = 0;
+  for (const r of govRows()) {
+    if (!Number.isFinite(r.live)) continue;
+    reporting++;
+    const p = prev[r.state];
+    if (!p) { noBase++; continue; }
+    if ((r.reporting ?? 0) < min) continue;
+    pts.push({
+      state: r.state, stateName: r.stateName,
+      base: p.margin, prev: p, live: r.live, swing: r.live - p.margin,
+      reporting: r.reporting ?? 0, votes: govTurnout2024(r.state),
+    });
+  }
+  return { pts, reporting, noBase };
+}
+
+/** 2024 two-party presidential turnout in a state, summed from the county table.
+    Used for dot size only — it is a measure of how big a state is, nothing more. */
+const _govTurnout = new Map();
+function govTurnout2024(st) {
+  if (_govTurnout.size === 0) {
+    for (const c of Object.values(DATA.counties || {})) {
+      _govTurnout.set(c.st, (_govTurnout.get(c.st) || 0) + (c.v2 || 0));
+    }
+  }
+  return _govTurnout.get(st) || 0;
+}
+
+function renderGovScatter() {
+  const zone = $('#gscatterzone');
+  const min = Number($('#gscattermin').value);
+  const { pts, reporting, noBase } = govScatterPoints(min);
+
+  $('#gscattercount').textContent = pts.length ? `· ${pts.length} of ${reporting} reporting` : '';
+  if (!pts.length) {
+    zone.replaceChildren(el('div', { class: 'warnbox', text: reporting
+      ? `No governor race is at ${min}% counted or better yet. Lower the threshold to see partial returns.`
+      : 'No governor race has reported yet. Demo data fills this in without any requests.' }));
+    return;
+  }
+
+  const W = 1000, H = 560, pad = { l: 72, r: 26, t: 20, b: 52 };
+  const lim = (key, floor, round) => {
+    const m = Math.max(...pts.map(p => Math.abs(p[key])));
+    return Math.max(floor, Math.ceil(m / round) * round);
+  };
+  const xlim = lim('swing', 10, 5), ylim = lim('base', 40, 10);
+  const X = (v) => pad.l + ((v + xlim) / (2 * xlim)) * (W - pad.l - pad.r);
+  const Y = (v) => H - pad.b - ((v + ylim) / (2 * ylim)) * (H - pad.t - pad.b);
+  const maxV = Math.max(1, ...pts.map(p => p.votes));
+  const rad = (p) => 4 + 7 * Math.sqrt((p.votes || maxV / 2) / maxV);
+
+  const P = [];
+  const xs = xlim > 40 ? 20 : xlim > 20 ? 10 : 5;
+  for (let v = -Math.floor(xlim / xs) * xs; v <= xlim; v += xs) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${X(v)}" x2="${X(v)}" y1="${pad.t}" y2="${H - pad.b}"/>`);
+    P.push(`<text x="${X(v)}" y="${H - pad.b + 16}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`);
+  }
+  const ys = ylim > 40 ? 20 : 10;
+  for (let v = -Math.floor(ylim / ys) * ys; v <= ylim; v += ys) {
+    P.push(`<line class="${v === 0 ? 'zero' : 'gridline'}" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/>`);
+    P.push(`<text x="${pad.l - 9}" y="${Y(v) + 4}" text-anchor="end">${v === 0 ? 'EVEN' : (v > 0 ? 'R+' : 'D+') + Math.abs(v)}</text>`);
+  }
+  P.push(`<text x="${(pad.l + W - pad.r) / 2}" y="${H - 8}" text-anchor="middle" class="lbl">swing since the last governor's race  →  more Republican</text>`);
+  P.push(`<text transform="translate(18 ${(pad.t + H - pad.b) / 2}) rotate(-90)" text-anchor="middle" class="lbl">margin in the last governor's race</text>`);
+
+  // Turnout-weighted fit, the same question the other two scatters ask: is the
+  // swing uniform, or does it depend on how the state already voted?
+  let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of pts) {
+    const w = p.votes || 1;
+    sw += w; sx += w * p.base; sy += w * p.swing;
+    sxx += w * p.base * p.base; sxy += w * p.base * p.swing;
+  }
+  const den = sw * sxx - sx * sx;
+  const slope = Math.abs(den) > 1e-9 ? (sw * sxy - sx * sy) / den : 0;
+  const intercept = (sy - slope * sx) / sw;
+
+  for (const p of [...pts].sort((a, b) => b.votes - a.votes)) {
+    P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.swing)}" opacity="0.65"/>`);
+  }
+  // Labels last so no dot sits on top of one. Thirty-six states is few enough
+  // to name every point, which is the whole advantage of a state-level chart.
+  for (const p of pts) {
+    const x = X(p.swing) + rad(p) + 3, y = Y(p.base) + 3.5;
+    P.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="gslbl" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${p.state}</text>`);
+  }
+  const yLo = Math.min(...pts.map(p => p.base)), yHi = Math.max(...pts.map(p => p.base));
+  const fit = (b) => intercept + slope * b;
+  P.push(`<line x1="${X(fit(yLo))}" y1="${Y(yLo)}" x2="${X(fit(yHi))}" y2="${Y(yHi)}" stroke="var(--ink-1)" stroke-width="2" stroke-dasharray="6 4" opacity="0.85"/>`);
+  P.push('<circle id="ghl" r="11" fill="none" stroke="var(--ink-1)" stroke-width="2" opacity="0"/>');
+
+  const svg = el('div', { html: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Governor swing versus the margin in each state's last gubernatorial race">${P.join('')}</svg>` }).firstElementChild;
+  const hl = svg.querySelector('#ghl');
+  svg.addEventListener('mousemove', (ev) => {
+    const box = svg.getBoundingClientRect();
+    const mx = ((ev.clientX - box.left) / box.width) * W;
+    const my = ((ev.clientY - box.top) / box.height) * H;
+    let best = null, bd = 1e9;
+    for (const p of pts) {
+      const dx = X(p.swing) - mx, dy = Y(p.base) - my, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (!best || bd > 500) { hl.setAttribute('opacity', '0'); hideTip(); return; }
+    hl.setAttribute('cx', X(best.swing)); hl.setAttribute('cy', Y(best.base)); hl.setAttribute('opacity', '1');
+    const pv = best.prev;
+    showTip(ev, `<b>${esc(best.stateName)}</b>
+      <div class="tr"><span>${pv.year}</span><span>${esc(pv.winner)} ${pv.winnerParty} by ${marginLabel(best.base)}</span></div>
+      <div class="tr"><span>Now</span><span>${marginLabel(best.live)}</span></div>
+      <div class="tr"><span>Swing</span><span>${fmt(best.swing)} toward ${best.swing > 0 ? 'R' : 'D'}</span></div>
+      <div class="tr"><span>Counted</span><span>${best.reporting.toFixed(0)}%</span></div>`);
+  });
+  svg.addEventListener('mouseleave', () => { hl.setAttribute('opacity', '0'); hideTip(); });
+
+  let tw = 0, tn = 0;
+  for (const p of pts) { const w = p.votes || 1; tw += w; tn += p.swing * w; }
+  const trend = Math.abs(slope) < 0.015
+    ? 'close to uniform across the partisan spectrum'
+    : slope > 0
+      ? `${(slope * 10).toFixed(1)} pts more Republican for every 10 points redder the state voted last time`
+      : `${(Math.abs(slope) * 10).toFixed(1)} pts more Democratic for every 10 points redder the state voted last time`;
+  const years = [...new Set(pts.map(p => p.prev.year))].sort();
+  zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
+    el('span', { html: `turnout-weighted mean swing <b>${fmt(tn / tw)}</b>` }),
+    el('span', { html: `trend (dashed): <b>${trend}</b>` }),
+    el('span', { class: 'muted', text: 'dot size = 2024 presidential turnout · colour = swing direction' }),
+    el('span', { class: 'muted',
+      title: 'New Hampshire and Vermont elect governors every two years, so their last race was 2024 while every other state here last voted in 2022.',
+      html: `baseline year: <b>${years.join(' and ')}</b>` }),
+    noBase ? el('span', { class: 'muted',
+      title: 'No row in data/governor_prev.csv, so there is no prior margin to measure a swing against.',
+      text: `${noBase} reporting race${noBase === 1 ? '' : 's'} without a baseline` }) : null,
   ]));
 }
 
@@ -3813,9 +4004,17 @@ function renderAll() {
     renderHouseScatter();
   } else if (tab === 'gov') {
     renderGovernor(gov);
+    renderGovScatter();
   }
   renderBanners();
   statusText();
+}
+
+/* The button that opens the assumptions menu also reports what is inside it,
+   so hiding the sliders does not hide where they are set. */
+function updateMcBtn() {
+  const b = $('#mcsetbtn');
+  if (b) b.textContent = `${(MC.systematic * 100).toFixed(0)}% systematic · ${envLabel()} ▾`;
 }
 
 let timer = null;
@@ -3843,6 +4042,7 @@ function init() {
   $('#builtat').textContent = `Baselines built ${new Date(DATA.meta.generated).toLocaleString()}.`;
   renderSources();
   loadOverrides();
+  updateMcBtn();
 
   $('#threshold').addEventListener('change', renderAll);
   $('#interval').addEventListener('change', resetTimer);
@@ -3873,6 +4073,7 @@ function init() {
   $('#mcsys').addEventListener('input', (e) => {
     MC.systematic = Number(e.target.value) / 100;
     $('#mcsysval').textContent = `${e.target.value}%`;
+    updateMcBtn();
     renderMonteCarlo(senateRows());
   });
   // Label on every drag frame, full re-render only on release: this one moves
@@ -3880,8 +4081,18 @@ function init() {
   $('#envgen').addEventListener('input', (e) => {
     ENV.generic2026 = Number(e.target.value);
     $('#envgenval').textContent = envLabel();
+    updateMcBtn();
   });
   $('#envgen').addEventListener('change', () => renderAll());
+  $('#gscattermin').addEventListener('change', renderGovScatter);
+  $('#mcsetbtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const p = $('#mcsetpanel');
+    p.hidden = !p.hidden;
+    $('#mcsetbtn').setAttribute('aria-expanded', String(!p.hidden));
+  });
+  // Dragging a slider must not count as a click outside the menu.
+  $('#mcsetpanel').addEventListener('click', (e) => e.stopPropagation());
   $('#scattermin').addEventListener('change', renderScatter);
   $('#scatterbase').addEventListener('change', renderScatter);
   $('#hscattermin').addEventListener('change', renderHouseScatter);
@@ -3898,8 +4109,10 @@ function init() {
     if (pick) setStatePick(pick.dataset.pick, [...new Set((state.allCounties || []).map(c => c.state))].sort());
   });
   document.addEventListener('click', () => {
-    const p = $('#statepanel');
-    if (!p.hidden) { p.hidden = true; $('#statebtn').setAttribute('aria-expanded', 'false'); }
+    for (const [panel, btn] of [['#statepanel', '#statebtn'], ['#mcsetpanel', '#mcsetbtn']]) {
+      const p = $(panel);
+      if (p && !p.hidden) { p.hidden = true; $(btn).setAttribute('aria-expanded', 'false'); }
+    }
   });
   $('#applyover').addEventListener('click', saveOverrides);
   $('#clearover').addEventListener('click', () => { $('#overrides').value = ''; saveOverrides(); });

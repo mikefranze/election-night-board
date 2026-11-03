@@ -1,0 +1,83 @@
+# The last gubernatorial election in each state holding one in 2026.
+#
+# This is the baseline for the Governor tab's swing-vs-lean scatter. Until this
+# file existed the board had no gubernatorial history at all and governors were
+# compared against Trump 2024, which measures a different electorate making a
+# different choice: Phil Scott's Vermont and Vermont's presidential vote are
+# fifty points apart and neither number is wrong.
+#
+# WHICH ELECTION. The most recent gubernatorial general before 2026. That is
+# 2022 for 34 states, and 2024 for New Hampshire and Vermont, the only two with
+# two-year terms. Both sets are the last time the office was actually contested,
+# which is the comparison the scatter is making.
+#
+# HOW THE MARGIN IS COMPUTED. Not here - the build does it, from the four
+# columns below, so the arithmetic is reviewable and these rows stay checkable
+# against the source. It is the two-way margin between the top two finishers,
+#
+#     (winner_pct - runnerup_pct) / (winner_pct + runnerup_pct) * 100
+#
+# signed Republican-positive, because that is exactly what marginFromRace()
+# computes for the live 2026 result. Both ends of the swing have to be measured
+# the same way or the subtraction is meaningless. It is NOT the raw gap: Idaho
+# 2022 was a 40-point win on the face of it but R+49.6 two-way, because Ammon
+# Bundy took 17% as an independent and the two-way margin renormalises him out.
+#
+# RUNNER-UP MEANS SECOND PLACE, not the best-placed Democrat. Alaska 2022 ran
+# under ranked choice with Dunleavy (R) first, Gara (D) second and Begich (R)
+# third; Idaho and Oregon both had an independent finish third. Taking second
+# place rather than the second party keeps this consistent with the live
+# margin, which sorts by votes and knows nothing about which parties are
+# supposed to be in contention.
+#
+# PROVENANCE. Transcribed by Claude from the Wikipedia results tables for the
+# 2022 and 2024 gubernatorial elections, not from a machine-readable dataset -
+# MEDSL publishes nothing covering governors at state level across these years,
+# and civicAPI carries a prior gubernatorial general for only 10 of these 36
+# states. Every row below is therefore one person's transcription of one
+# source. The build checks the shape of it - all 36 states present, no extras,
+# both finishers R or D, percentages in range - but it cannot check the numbers
+# themselves. Worth a spot-check against your own source before anything rests
+# on it. Nothing else on the board reads this file, so an error here moves the
+# Governor scatter and nothing more.
+#
+# Names must not contain a comma: the reader splits on commas and does not
+# handle quoted fields.
+#
+state,year,winner,winner_party,winner_pct,runnerup_party,runnerup_pct
+AL,2022,Kay Ivey,R,66.9,D,29.2
+AK,2022,Mike Dunleavy,R,50.3,D,24.2
+AZ,2022,Katie Hobbs,D,50.3,R,49.7
+AR,2022,Sarah Huckabee Sanders,R,63.0,D,35.2
+CA,2022,Gavin Newsom,D,59.2,R,40.8
+CO,2022,Jared Polis,D,58.5,R,39.2
+CT,2022,Ned Lamont,D,56.0,R,43.1
+FL,2022,Ron DeSantis,R,59.4,D,40.0
+GA,2022,Brian Kemp,R,53.4,D,45.9
+HI,2022,Josh Green,D,63.2,R,36.8
+ID,2022,Brad Little,R,60.5,D,20.3
+IL,2022,J. B. Pritzker,D,54.9,R,42.4
+IA,2022,Kim Reynolds,R,58.0,D,39.5
+KS,2022,Laura Kelly,D,49.5,R,47.3
+ME,2022,Janet Mills,D,55.7,R,42.4
+MD,2022,Wes Moore,D,64.5,R,32.1
+MA,2022,Maura Healey,D,63.7,R,34.6
+MI,2022,Gretchen Whitmer,D,54.5,R,43.9
+MN,2022,Tim Walz,D,52.3,R,44.6
+NE,2022,Jim Pillen,R,59.7,D,36.3
+NV,2022,Joe Lombardo,R,48.8,D,47.3
+NH,2024,Kelly Ayotte,R,53.6,D,44.3
+NM,2022,Michelle Lujan Grisham,D,52.0,R,45.6
+NY,2022,Kathy Hochul,D,53.2,R,46.8
+OH,2022,Mike DeWine,R,62.4,D,37.4
+OK,2022,Kevin Stitt,R,55.4,D,41.8
+OR,2022,Tina Kotek,D,47.0,R,43.6
+PA,2022,Josh Shapiro,D,56.5,R,41.7
+RI,2022,Dan McKee,D,57.9,R,38.9
+SC,2022,Henry McMaster,R,58.1,D,40.7
+SD,2022,Kristi Noem,R,62.0,D,35.2
+TN,2022,Bill Lee,R,64.9,D,32.9
+TX,2022,Greg Abbott,R,54.8,D,43.9
+VT,2024,Phil Scott,R,73.4,D,21.8
+WI,2022,Tony Evers,D,51.2,R,47.8
+WY,2022,Mark Gordon,R,74.1,D,15.8

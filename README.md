@@ -247,7 +247,20 @@ A scatter of every reporting county across all Senate races: vertical axis is th
 county's 2024 presidential margin, horizontal axis is how far it has moved since,
 dot size is 2024 turnout, colour is swing direction.
 
-The question it answers is whether a swing is **uniform or differential**. A
+There are three of these charts, asking the same question of different units.
+The Senate one plots **counties**, because county-level Senate results exist for
+a prior cycle. The House one plots **districts** against their 2024 result on
+current lines. The Governor one plots **states** against the margin in that
+state's last governor's race — 2022 everywhere except New Hampshire and Vermont,
+which elect every two years — and labels all 36, because at that size a chart
+you have to hover to read is no use at a glance.
+
+Comparing a governor's race to a presidential one, which is what the Governor
+table still does, turns split-ticket voting into an enormous phantom swing in
+the same states every time: Vermont elected Phil Scott by R+54 and voted for
+Harris by D+32 within a year of each other, and neither number is wrong.
+
+The question all three answer is whether a swing is **uniform or differential**. A
 vertical cloud means the whole country moved together; a tilted one means the
 move is concentrated in particular kinds of place. The dashed line is a
 turnout-weighted least-squares fit, reported in plain language underneath — e.g.
@@ -446,9 +459,12 @@ certified results.
   fallback is the **manual override** box (bottom of the page), which accepts
   `race_key, margin, percent_reporting` per line and overrides the feed.
   Overrides are stored in that browser only.
-- **No last-gubernatorial-margin baseline.** No fetchable statewide governor
-  history dataset was found, so governors are compared to Trump 2024 and polling
-  only, rather than showing a half-sourced number.
+- **The last-gubernatorial-margin baseline is hand-entered.** No fetchable
+  statewide governor history dataset exists for these years, so
+  `data/governor_prev.csv` is a transcription of the 2022 and 2024 results
+  tables rather than a parsed source. The build validates its shape, not its
+  contents. The Governor table still compares against Trump 2024; only the
+  swing chart uses this file.
 - **NY-21** has no published 2024 presidential totals in the source table; it
   renders as unknown rather than guessed.
 - **civicAPI candidate metadata has errors** (duplicate entries, at least one

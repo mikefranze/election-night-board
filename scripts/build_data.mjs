@@ -291,6 +291,77 @@ const gov2026 = [];
   }
 }
 
+/* ---------- 3b. The last gubernatorial election in each 2026 state ----------
+   The baseline for the Governor tab's swing-vs-lean scatter. There was no
+   gubernatorial history on this board at all before this: governors were
+   compared against Trump 2024, which is a different electorate answering a
+   different question, and in Vermont the two are fifty points apart.
+
+   Hand-entered in data/governor_prev.csv because no dataset covers it. MEDSL
+   publishes nothing for governors at state level across these years, and
+   civicAPI carries a prior gubernatorial general for only 10 of these 36
+   states, so there is nothing to parse. What the file holds is the two
+   finishers and their percentages; the margin is computed here, from those,
+   so the arithmetic is in code and the rows stay checkable against the source.
+
+   Two-way margin between the top two, Republican-positive - the identical
+   formula marginFromRace() applies to the live result, because a swing between
+   two differently-measured margins is not a swing. Second place means second
+   place, not the best-placed Democrat: Alaska 2022 ran under ranked choice
+   with a Republican third, and Idaho and Oregon each had an independent there.
+
+   Validated, not trusted: every 2026 governor state must have exactly one row,
+   no row may name a state that is not holding one, both finishers must be R or
+   D and differ, and percentages must be in range and sum to no more than 100.
+   None of that can check whether the numbers are right - see the file header. */
+const govPrevByState = {};
+{
+  const gpPath = R('data/governor_prev.csv');
+  if (!fs.existsSync(gpPath)) {
+    warn.push('data/governor_prev.csv missing; the Governor swing scatter will have no baseline');
+  } else {
+    const lines = fs.readFileSync(gpPath, 'utf8').split(/\r?\n/)
+      .filter(l => l.trim() && !l.trimStart().startsWith('#'));
+    const tmp = R('build/.govprev.tmp.csv');
+    fs.mkdirSync(R('build'), { recursive: true });
+    fs.writeFileSync(tmp, lines.join('\n'));
+
+    const want = new Set(gov2026.map(g => g.state));
+    const seen = new Set();
+    for (const row of parseDelimited(tmp, ',')) {
+      const st = String(row.state || '').trim();
+      if (!st) continue;
+      const year = Number(row.year);
+      const wp = String(row.winner_party || '').trim().toUpperCase();
+      const rp = String(row.runnerup_party || '').trim().toUpperCase();
+      const wpct = Number(row.winner_pct);
+      const rpct = Number(row.runnerup_pct);
+      const winner = String(row.winner || '').trim();
+      const at = `governor_prev ${st}`;
+
+      if (!want.has(st)) throw new Error(`${at}: no 2026 governor race in that state, so this row has nothing to be a baseline for`);
+      if (seen.has(st)) throw new Error(`${at}: listed twice`);
+      seen.add(st);
+      if (!Number.isFinite(year) || year < 2000 || year >= 2026) throw new Error(`${at}: year ${JSON.stringify(row.year)} is not a plausible prior election year`);
+      if (!winner) throw new Error(`${at}: winner name is blank`);
+      if (!/^[RD]$/.test(wp) || !/^[RD]$/.test(rp)) throw new Error(`${at}: both finishers must be R or D, got ${JSON.stringify(wp)} and ${JSON.stringify(rp)}`);
+      if (wp === rp) throw new Error(`${at}: winner and runner-up are both ${wp}; the two-way margin would be meaningless`);
+      if (!(wpct > 0 && wpct <= 100) || !(rpct > 0 && rpct <= 100)) throw new Error(`${at}: percentages out of range (${wpct}, ${rpct})`);
+      if (wpct < rpct) throw new Error(`${at}: winner_pct ${wpct} is below runnerup_pct ${rpct}; the columns are the wrong way round`);
+      if (wpct + rpct > 100.5) throw new Error(`${at}: the two finishers total ${(wpct + rpct).toFixed(1)}%, which cannot be right`);
+
+      const spread = ((wpct - rpct) / (wpct + rpct)) * 100;
+      govPrevByState[st] = {
+        year, winner, winnerParty: wp,
+        margin: +(wp === 'R' ? spread : -spread).toFixed(1),
+        winnerPct: wpct, runnerUpParty: rp, runnerUpPct: rpct,
+      };
+    }
+    const missing = [...want].filter(st => !seen.has(st)).sort();
+    if (missing.length) warn.push(`governor_prev has no row for: ${missing.join(', ')} - those states drop out of the Governor swing scatter`);
+  }
+}
+
 // Poll closing times are only available from the per-race endpoint, so
 // fetch_index.mjs collects them and they are baked in here.
 let pollTimes = {};
@@ -451,6 +522,7 @@ const out = {
       senateHistory: 'MIT Election Data + Science Lab, U.S. Senate statewide 1976-2024 (doi:10.7910/DVN/PEJ5QU)',
       houseHistory: 'MIT Election Data + Science Lab, U.S. House 1976-2024 (doi:10.7910/DVN/IG0UN2)',
       polling: 'data/polling_averages.csv (user-supplied)',
+      governorPrev: 'data/governor_prev.csv (hand-entered; see its header)',
       redistricting: 'The Downballot, 2024 presidential by CD on the 2026 lines (calc. Daniel Donner), differenced against the same release on the 2024 lines',
     },
     counts: {},
@@ -464,6 +536,7 @@ const out = {
   counties,
   senatePrevByCounty,
   senatePrevByState,
+  govPrevByState,
   senate2026,
   gov2026,
   pollTimes,
@@ -483,6 +556,7 @@ out.meta.counts = {
   houseWatch: houseWatch.length,
   pollingRows: Object.keys(polling).length,
   senatePrevCounties: Object.keys(senatePrevByCounty).length,
+  govPrevStates: Object.keys(govPrevByState).length,
   warnings: warn.length,
 };
 
