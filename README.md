@@ -245,7 +245,12 @@ with both names is the fix if that ever matters.
 
 A scatter of every reporting county across all Senate races: vertical axis is the
 county's 2024 presidential margin, horizontal axis is how far it has moved since,
-dot size is 2024 turnout, colour is swing direction.
+dot size is 2024 turnout, colour is who leads there now.
+
+Colour and position answer different questions on purpose. Position is the swing
+- how far the unit has moved, and which way. Colour is the result as it stands
+tonight. A dot can sit well to the left, having moved sharply toward the
+Democrats, and still be red, because moving is not the same as flipping.
 
 There are three of these charts, asking the same question of different units.
 The Senate one plots **counties**, because county-level Senate results exist for

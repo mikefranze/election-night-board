@@ -417,7 +417,8 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
     <div>
       <h2>County swing vs lean <span class="sub" id="scattercount"></span></h2>
       <div class="sub">Every reporting county across all Senate races. Vertical axis is the county's 2024
-        presidential margin; horizontal axis is how far it has moved since. Dot size is 2024 turnout.</div>
+        presidential margin; horizontal axis is how far it has moved since. Dot size is 2024 turnout, colour is
+        who leads there now.</div>
     </div>
     <div class="spacer"></div>
     <label class="sub">Compare to
@@ -491,7 +492,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       <h2>District swing vs lean <span class="sub" id="hscattercount"></span></h2>
       <div class="sub">Every reporting district. Vertical axis is the 2024 House margin restated on the
         boundaries the district is using now; horizontal axis is how far it has moved since.
-        Dot size is 2024 presidential turnout; redrawn districts carry a ring.</div>
+        Dot size is 2024 presidential turnout, colour is who leads now; redrawn districts carry a ring.</div>
     </div>
     <div class="spacer"></div>
     <label class="sub">Min. counted
@@ -528,7 +529,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
       <h2>Swing vs lean <span class="sub" id="gscattercount"></span></h2>
       <div class="sub">One dot per state. Vertical axis is the margin in that state's last governor's race —
         2022 everywhere except New Hampshire and Vermont, which elect every two years; horizontal axis is how
-        far it has moved since. Dot size is 2024 presidential turnout.</div>
+        far it has moved since. Dot size is 2024 presidential turnout, colour is who leads now.</div>
     </div>
     <div class="spacer"></div>
     <label class="sub">Min. counted
@@ -3224,7 +3225,7 @@ function renderHouseScatter() {
   const intercept = (sy - slope * sx) / sw;
 
   for (const p of [...pts].sort((a, b) => b.votes - a.votes)) {
-    P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.swing)}" opacity="0.6"/>`);
+    P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.live)}" opacity="0.6"/>`);
     if (p.rd) P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${(rad(p) + 2.5).toFixed(1)}" fill="none" stroke="var(--ink-1)" stroke-width="1.2" opacity="0.75"/>`);
   }
   const yLo = Math.min(...pts.map(p => p.base)), yHi = Math.max(...pts.map(p => p.base));
@@ -3264,6 +3265,7 @@ function renderHouseScatter() {
   zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
     el('span', { html: `turnout-weighted mean swing <b>${fmt(tn / tw)}</b>` }),
     el('span', { html: `trend (dashed): <b>${trend}</b>` }),
+    el('span', { class: 'muted', title: 'Shade follows the size of the current lead, so the cloud reads as the map stands tonight. Position still carries the swing: left is a move toward the Democrats, right toward the Republicans.', text: 'dot size = 2024 presidential turnout · colour = who leads now' }),
     el('span', { class: 'muted', text: `${nrd} of ${pts.length} shown are redrawn (ringed)` }),
     el('span', { class: 'muted', title: 'An unopposed 2024 race has no usable margin, so there is nothing to plot it against.', text: 'districts unopposed in 2024 are not plotted' }),
   ]));
@@ -3369,7 +3371,7 @@ function renderGovScatter() {
   const intercept = (sy - slope * sx) / sw;
 
   for (const p of [...pts].sort((a, b) => b.votes - a.votes)) {
-    P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.swing)}" opacity="0.65"/>`);
+    P.push(`<circle cx="${X(p.swing).toFixed(1)}" cy="${Y(p.base).toFixed(1)}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.live)}" opacity="0.65"/>`);
   }
   // Labels last so no dot sits on top of one. Thirty-six states is few enough
   // to name every point, which is the whole advantage of a state-level chart.
@@ -3415,7 +3417,7 @@ function renderGovScatter() {
   zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
     el('span', { html: `turnout-weighted mean swing <b>${fmt(tn / tw)}</b>` }),
     el('span', { html: `trend (dashed): <b>${trend}</b>` }),
-    el('span', { class: 'muted', text: 'dot size = 2024 presidential turnout · colour = swing direction' }),
+    el('span', { class: 'muted', title: 'Shade follows the size of the current lead, so the cloud reads as the map stands tonight. Position still carries the swing: left is a move toward the Democrats, right toward the Republicans.', text: 'dot size = 2024 presidential turnout · colour = who leads now' }),
     el('span', { class: 'muted',
       title: 'New Hampshire and Vermont elect governors every two years, so their last race was 2024 while every other state here last voted in 2022.',
       html: `baseline year: <b>${years.join(' and ')}</b>` }),
@@ -3539,7 +3541,7 @@ function renderScatter() {
 
   // points, largest first so small counties stay visible on top
   for (const p of [...pts].sort((a, b) => (b.baseV2 || 0) - (a.baseV2 || 0))) {
-    P.push(`<circle cx="${X(clampX(p.swing))}" cy="${Y(clampY(p.base))}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.swing)}" opacity="0.55"/>`);
+    P.push(`<circle cx="${X(clampX(p.swing))}" cy="${Y(clampY(p.base))}" r="${rad(p).toFixed(1)}" fill="${marginColor(p.live)}" opacity="0.55"/>`);
   }
   // Draw the fit only across the range counties actually occupy.
   const yLo = clampY(Math.min(...pts.map(p => p.base)));
@@ -3586,7 +3588,7 @@ function renderScatter() {
   zone.replaceChildren(svg, el('div', { class: 'legend', style: 'margin-top:10px' }, [
     el('span', { html: `turnout-weighted mean swing <b>${fmt(meanSwing)}</b>` }),
     el('span', { html: `trend (dashed): <b>${trend}</b>` }),
-    el('span', { class: 'muted', text: 'dot size = 2024 turnout · colour = swing direction' }),
+    el('span', { class: 'muted', title: 'Shade follows the size of the current lead, so the cloud reads as the map stands tonight. Position still carries the swing: left is a move toward the Democrats, right toward the Republicans.', text: 'dot size = 2024 turnout · colour = who leads now' }),
     // Footnote the states not compared against 2020, so a mixed-year baseline is
     // never passed off as a single one.
     ...(mode === 'senate2020' ? (() => {
