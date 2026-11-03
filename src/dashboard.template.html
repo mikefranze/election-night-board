@@ -749,17 +749,32 @@ const hasCount = (res) => !!res && (res.total || 0) > 0;
  * Retries with backoff. civicAPI is an anonymous service with no SLA and has
  * returned a 503 before; a transient blip should not blank the board.
  */
+/* A request that HANGS is worse than one that fails, because nothing in the
+   retry logic below ever runs for it. fetch() has no timeout of its own, so
+   without this a single dead socket left state.fetching true for good: every
+   later tick hit the re-entrancy guard and returned, lastError stayed null,
+   and the status line sat on "fetching..." while the board showed frozen
+   numbers. It looked alive. That is the worst way for it to fail.
+
+   25s per attempt. The slowest real request measured on election morning was
+   16.5s, so this is headroom over a slow feed rather than a limit on one. */
+const FETCH_TIMEOUT_MS = 25000;
+
 async function getJSON(url, tries = 3) {
   let last;
   for (let i = 1; i <= tries; i++) {
+    const ac = typeof AbortController === 'function' ? new AbortController() : null;
+    const kill = ac ? setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS) : null;
     try {
-      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: ac ? ac.signal : undefined });
       if (r.status === 429 || r.status >= 500) throw new Error(`HTTP ${r.status}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return await r.json();
     } catch (e) {
-      last = e;
+      last = (e && e.name === 'AbortError') ? new Error(`timed out after ${FETCH_TIMEOUT_MS / 1000}s`) : e;
       if (i < tries) await new Promise(z => setTimeout(z, 700 * i * i));
+    } finally {
+      if (kill) clearTimeout(kill);
     }
   }
   throw new Error(`${last && last.message} for ${url}`);
@@ -863,16 +878,31 @@ async function probeTestData(sen) {
   } catch { return null; }
 }
 
+const SWEEP_DEADLINE_MS = 150000;
+
 async function refresh() {
   if (state.fetching) return;
   state.fetching = true;
   setStatus('fetching', 'fetching…');
   try {
-    const [sen, house, gov] = await Promise.all([
+    // Belt as well as braces. The per-request timeout above should make a
+    // stuck sweep impossible, but "impossible" is how the last one got here:
+    // if anything leaves these promises unsettled, this releases the guard so
+    // the next tick can try again, rather than the board stalling for the
+    // night. A sweep measured ~45s on election morning; this only fires on a
+    // genuine hang.
+    const sweep = Promise.all([
       fetchSenate(),
       fetchHouse().catch(() => new Map()),
       fetchGovernor().catch(() => new Map()),
     ]);
+    let bell;
+    const deadline = new Promise((_, rej) => {
+      bell = setTimeout(() => rej(new Error(`sweep gave up after ${SWEEP_DEADLINE_MS / 1000}s`)), SWEEP_DEADLINE_MS);
+    });
+    // The loser of this race is abandoned, not cancelled. That is safe: its
+    // value is never assigned, so a late sweep cannot overwrite fresher data.
+    const [sen, house, gov] = await Promise.race([sweep, deadline]).finally(() => clearTimeout(bell));
     // Ask the feed what it is before trusting a single count out of it. This
     // gates the display and the history write below, so it has to resolve
     // before either.
