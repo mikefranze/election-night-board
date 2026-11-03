@@ -203,11 +203,26 @@ previous refresh in memory.
 Briefly highlight any table cell whose value moved since the last refresh. Makes
 a 30-second refresh legible instead of invisible.
 
-### 1.5 Surface turnout vs 2024 — **S**
+### 1.5 Surface turnout vs 2024 — **S** — **Done, differently**
 
-`k` (the turnout scale) is already computed and only shown inside the county
-panel. Promote it to the Senate table and Summary — on the night, "turnout is
-running 80% of 2024" is itself a story.
+Shipped as a **Turnout so far** panel on the Summary tab: votes cast for each
+party against what the same races produced last time, per office. Not `k` —
+that is a county-level scale against the 2024 presidential vote, and it stays
+in the county panel. This compares like offices with like.
+
+The baseline year is not the same for all three, which is the part worth
+knowing. House and Governor go against **2022**, the previous midterm with the
+same seats. The Senate goes against **2020**, because the seats up in 2026 are
+Class 2 and 2022 was Class 3 — a different set of seats that happens to share
+19 states. The price is that the Senate row is measured against a presidential
+year and sits far below 100% all night; the panel labels every row with its
+year and says why.
+
+Only races that have reported count, each carrying its own baseline, and a race
+is dropped unless both parties are on the ballot at both ends. Four Senate
+races have no usable 2020 baseline (Arkansas ran no Democrat; Wyoming carries
+no party data in MEDSL; Florida and Ohio had no 2020 race, their 2026 contests
+being specials), as do 36 House districts that went uncontested in 2022.
 
 ---
 

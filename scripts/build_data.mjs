@@ -362,6 +362,107 @@ const govPrevByState = {};
   }
 }
 
+/* ---------- 3c. Turnout baselines: votes cast per party, last time ----------
+   For the Summary tab's turnout panel. Three baselines, one per office, each
+   the last comparable election for THOSE SEATS - which is not the same year in
+   all three, and the difference is not cosmetic.
+
+   HOUSE -> 2022. Same office, same 435 seats, previous midterm. The clean one.
+
+   GOVERNOR -> 2022. All 36 states holding a 2026 race also voted in 2022, so
+   this is midterm against midterm with the same states. (Not the same thing as
+   governor_prev.csv, which holds the most RECENT race and is therefore 2024 for
+   New Hampshire and Vermont.)
+
+   SENATE -> 2020, not 2022, and this is the one that catches people out. The
+   seats up in 2026 are Class 2, last contested in 2020. The 2022 Senate map was
+   Class 3: a different set of seats, overlapping these states only 19 times and
+   never the same seat. Comparing them would be comparing Texas and Florida
+   against California and New York and calling the difference turnout. 2020 is
+   the same 33 seats - all but Florida and Ohio, whose 2026 contests are
+   specials with no Class 2 seat behind them - at the cost of being a
+   presidential year, so the whole row will sit far below 100%. The panel says
+   which year each row is against for exactly this reason.
+
+   All three sum every candidate of each party, not the top two, so "votes cast
+   for Republicans" means the same thing in all three rows. */
+const turnoutBase = { senate: {}, house: {}, gov: {}, years: { senate: 2020, house: 2022, gov: 2022 } };
+{
+  const add = (bag, key, party, v) => {
+    if (!Number.isFinite(v) || v <= 0) return;
+    const g = bag[key] || (bag[key] = { D: 0, R: 0 });
+    if (party === 'D') g.D += v; else if (party === 'R') g.R += v;
+  };
+  const letter = (p) => {
+    const s = String(p || '').toUpperCase();
+    return s === 'DEMOCRAT' || s === 'DEMOCRATIC' ? 'D' : s === 'REPUBLICAN' ? 'R' : null;
+  };
+
+  // Senate 2020, from the MEDSL file the previous-margin baseline already uses.
+  const want2026 = new Set(senate2026.map(s => s.state));
+  for (const r of parseDelimited(R('data/raw_medsl/senate_1976_2024.csv'), ',')) {
+    if (r.year !== '2020' || !want2026.has(r.state_po)) continue;
+    // Georgia ran a Class 3 special alongside its Class 2 race in 2020. Summing
+    // both would double the state and call the result turnout.
+    if (String(r.special).toLowerCase() === 'true') continue;
+    const p = letter(r.party_simplified); if (!p) continue;
+    add(turnoutBase.senate, r.state_po, p, Number(r.candidatevotes));
+  }
+
+  // House 2022, every district. Nine states redrew their lines for 2026, so for
+  // those a district's 2022 vote came out of different territory than its 2026
+  // one will. Nothing can be done about that short of a vote-level crosswalk;
+  // the panel says so, and the error washes out as more districts report.
+  for (const r of parseDelimited(R('data/raw_medsl/house_1976_2024.tsv'), ',')) {
+    if (r.year !== '2022') continue;
+    const p = letter(r.party); if (!p) continue;
+    const d = String(r.district || '0').padStart(2, '0');
+    add(turnoutBase.house, `${r.state_po}-${d === '00' ? '01' : d}`, p, Number(r.candidatevotes));
+  }
+
+  // Governor 2022, hand-entered; see the file header for where each row is from.
+  const gvPath = R('data/governor_votes_2022.csv');
+  if (!fs.existsSync(gvPath)) {
+    warn.push('data/governor_votes_2022.csv missing; the Governor turnout row will be blank');
+  } else {
+    const lines = fs.readFileSync(gvPath, 'utf8').split(/\r?\n/)
+      .filter(l => l.trim() && !l.trimStart().startsWith('#'));
+    const tmp = R('build/.govvotes.tmp.csv');
+    fs.mkdirSync(R('build'), { recursive: true });
+    fs.writeFileSync(tmp, lines.join('\n'));
+    const want = new Set(gov2026.map(g => g.state));
+    const seen = new Set();
+    for (const row of parseDelimited(tmp, ',')) {
+      const st = String(row.state || '').trim(); if (!st) continue;
+      const d = Number(row.dem_votes), rv = Number(row.rep_votes);
+      if (!want.has(st)) throw new Error(`governor_votes_2022 ${st}: no 2026 governor race in that state`);
+      if (seen.has(st)) throw new Error(`governor_votes_2022 ${st}: listed twice`);
+      seen.add(st);
+      if (!(d > 0) || !(rv > 0)) throw new Error(`governor_votes_2022 ${st}: both vote counts must be positive, got ${row.dem_votes}/${row.rep_votes}`);
+      turnoutBase.gov[st] = { D: d, R: rv };
+    }
+    const missing = [...want].filter(s => !seen.has(s)).sort();
+    if (missing.length) warn.push(`governor_votes_2022 has no row for: ${missing.join(', ')} — those states drop out of the turnout comparison`);
+  }
+}
+
+/* A race joins the turnout comparison only if its baseline has votes on BOTH
+   sides. A ratio against zero is not a number, and the cases are real:
+   Arkansas ran no Democrat against Tom Cotton in 2020; Wyoming's 2020 rows
+   carry no party at all in the MEDSL file, where party_simplified is OTHER and
+   party_detailed is empty for every candidate, Lummis included; and Florida
+   and Ohio have no 2020 Senate race at all, their 2026 contests being specials.
+
+   Dropping the race takes it off BOTH sides of the comparison, which is the
+   only way the two halves stay the same set of contests - counting a 2026 vote
+   whose baseline was thrown away would quietly inflate every percentage. The
+   panel reports how many races it is actually comparing. */
+for (const office of ['senate', 'house', 'gov']) {
+  for (const [k, g] of Object.entries(turnoutBase[office])) {
+    if (!(g.D > 0) || !(g.R > 0)) delete turnoutBase[office][k];
+  }
+}
+
 // Poll closing times are only available from the per-race endpoint, so
 // fetch_index.mjs collects them and they are baked in here.
 let pollTimes = {};
@@ -523,6 +624,7 @@ const out = {
       houseHistory: 'MIT Election Data + Science Lab, U.S. House 1976-2024 (doi:10.7910/DVN/IG0UN2)',
       polling: 'data/polling_averages.csv (user-supplied)',
       governorPrev: 'data/governor_prev.csv (hand-entered; see its header)',
+      turnout: 'Senate 2020 + House 2022 from MEDSL; Governor 2022 from data/governor_votes_2022.csv',
       redistricting: 'The Downballot, 2024 presidential by CD on the 2026 lines (calc. Daniel Donner), differenced against the same release on the 2024 lines',
     },
     counts: {},
@@ -537,6 +639,7 @@ const out = {
   senatePrevByCounty,
   senatePrevByState,
   govPrevByState,
+  turnoutBase,
   senate2026,
   gov2026,
   pollTimes,
@@ -557,6 +660,9 @@ out.meta.counts = {
   pollingRows: Object.keys(polling).length,
   senatePrevCounties: Object.keys(senatePrevByCounty).length,
   govPrevStates: Object.keys(govPrevByState).length,
+  turnoutSenate: Object.keys(turnoutBase.senate).length,
+  turnoutHouse: Object.keys(turnoutBase.house).length,
+  turnoutGov: Object.keys(turnoutBase.gov).length,
   warnings: warn.length,
 };
 

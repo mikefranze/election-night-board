@@ -1,0 +1,67 @@
+# Votes cast for Democratic and Republican candidates in each state's 2022
+# governor race. Used only by the Summary tab's turnout comparison.
+#
+# WHY A SEPARATE FILE FROM governor_prev.csv. That file holds the most recent
+# gubernatorial election, which is 2024 for New Hampshire and Vermont - the two
+# states with two-year terms - and it holds percentages, not votes. Turnout
+# wants the opposite on both counts: the same cycle everywhere, so the
+# comparison is midterm against midterm, and raw votes, because that is the
+# quantity being compared. All 36 states voted for governor in 2022, so 2022 is
+# available for every one of them.
+#
+# PARTY TOTALS, NOT THE TOP TWO. These sum every Republican and every Democrat
+# on the ballot, which is what the Senate and House baselines do (MEDSL's
+# party_simplified) and what makes "votes cast for each party" mean the same
+# thing in all three rows. It matters in Alaska, which ran two Republicans under
+# ranked choice in 2022: Dunleavy 132,632 and Pierce 11,817, summed here to
+# 144,449. Independents are not counted on either side, so Bill Walker's 54,668
+# in that race appears nowhere - the comparison is R against D, and a state
+# where an independent took a fifth of the vote will understate total turnout.
+#
+# SOURCES, per row. "civicapi" is the feed's own 2022 record, summed from raw
+# candidate vote totals - the same arithmetic the live board does. "ballotpedia"
+# is that state's certified results table. The ten civicapi rows were also the
+# ten used to cross-check governor_prev.csv, and CA, FL and IA agree with
+# Wikipedia's tables to within five votes.
+#
+# NOT CHECKED BY THE BUILD BEYOND SHAPE: every 2026 governor state present
+# exactly once, no extras, both counts positive. Nothing verifies the counts.
+# An error here moves one row of one panel and nothing else on the board.
+#
+state,dem_votes,rep_votes,source
+AL,412961,946932,civicapi
+AK,63851,144449,ballotpedia
+AZ,1287891,1270774,civicapi
+AR,319242,571105,ballotpedia
+CA,6470099,4462910,civicapi
+CO,1468481,983040,ballotpedia
+CT,710186,546209,ballotpedia
+FL,3106313,4614210,civicapi
+GA,1813673,2111572,ballotpedia
+HI,261025,152237,ballotpedia
+ID,120160,358598,ballotpedia
+IL,2253748,1739095,ballotpedia
+IA,482950,709198,civicapi
+KS,499849,477591,ballotpedia
+ME,376934,287304,ballotpedia
+MD,1293944,644000,ballotpedia
+MA,1581214,859433,civicapi
+MI,2430505,1960635,ballotpedia
+MN,1312349,1119941,ballotpedia
+NE,242006,398334,ballotpedia
+NV,481991,497377,ballotpedia
+NH,256766,352813,ballotpedia
+NM,370168,324701,ballotpedia
+NY,3140415,2762581,civicapi
+OH,1545489,2580424,ballotpedia
+OK,481904,639484,ballotpedia
+OR,917074,850347,ballotpedia
+PA,3031137,2238477,ballotpedia
+RI,207166,139001,ballotpedia
+SC,692691,988501,ballotpedia
+SD,123148,217035,ballotpedia
+TN,572818,1129390,ballotpedia
+TX,3553656,4437099,civicapi
+VT,68248,202147,civicapi
+WI,1358774,1268535,ballotpedia
+WY,30686,143696,civicapi

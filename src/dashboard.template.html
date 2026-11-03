@@ -289,6 +289,20 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   <div id="flipzone"></div>
 </section>
 
+<!-- ===== turnout ===== -->
+<section class="panel">
+  <div class="hrow" style="margin-bottom:6px">
+    <div>
+      <h2>Turnout so far <span class="sub" id="turnoutcount"></span></h2>
+      <div class="sub">Votes cast for each party, against what the <b>same races</b> produced last time. House and
+        Governor compare to <b>2022</b>, the previous midterm. The Senate compares to <b>2020</b>: the seats up this
+        year are Class 2 and last ran then, while the 2022 map was a different set of seats — so that row is against
+        a presidential year and will sit well below 100% all night.</div>
+    </div>
+  </div>
+  <div id="turnoutzone"></div>
+</section>
+
 <!-- ===== systemic polling error ===== -->
 <section class="panel">
   <div class="hrow" style="margin-bottom:10px">
@@ -2427,6 +2441,158 @@ function renderMonteCarlo(rows) {
 }
 
 /* ============================================================
+   Rendering — turnout against the last comparable election
+   ------------------------------------------------------------
+   Votes cast for each party so far, against what the SAME races produced last
+   time. Three things make that harder than it sounds, and all three are
+   handled by only ever comparing like with like:
+
+   1. The baseline year is not the same for all three offices. House and
+      Governor compare to 2022, the previous midterm with the same seats.
+      The Senate compares to 2020, because the seats up in 2026 are Class 2 and
+      2022 was Class 3 - a different set of seats entirely. The cost is that
+      2020 was a presidential year, so the Senate row will sit far below 100%
+      all night and that is the cycle, not the enthusiasm. Each row is labelled
+      with its year.
+
+   2. Only races that have reported count, and each one brings its own baseline
+      with it. A running total against the full national baseline would just be
+      a measure of how many states have finished counting.
+
+   3. A race only counts if both parties are on the ballot at both ends. Idaho
+      runs no Democrat for Senate in 2026 but did in 2020; counting it would
+      book zero Democratic votes against a real baseline and drag the figure
+      down for reasons that have nothing to do with turnout.
+
+   What it still cannot do is tell you turnout is down when counting is merely
+   unfinished. A race at 40% counted contributes roughly 40% of its eventual
+   vote, so every percentage here climbs through the night. The counted column
+   is there to be read alongside, and the note says so.
+   ============================================================ */
+function turnoutFor(office) {
+  const base = (DATA.turnoutBase && DATA.turnoutBase[office]) || {};
+  const prefix = office === 'senate' ? 'senate/' : office === 'gov' ? 'gov/' : 'house/';
+  const out = { races: 0, comparable: 0, dNow: 0, rNow: 0, dBase: 0, rBase: 0, reporting: 0, skipped: 0 };
+  for (const [k, g] of Object.entries(base)) {
+    out.comparable++;
+    const res = resultFor(prefix + k);
+    if (!hasCount(res)) continue;
+    const cands = res.candidates || [];
+    // Both parties on the 2026 ballot, or the race is not comparable to one
+    // where both were. Checked on the roster, not on votes, so a race nobody
+    // has counted yet is not mistaken for a one-party race.
+    if (!cands.some(c => c.party === 'D') || !cands.some(c => c.party === 'R')) { out.skipped++; continue; }
+    const d = cands.filter(c => c.party === 'D').reduce((s, c) => s + (c.votes || 0), 0);
+    const r = cands.filter(c => c.party === 'R').reduce((s, c) => s + (c.votes || 0), 0);
+    if (d + r <= 0) continue;
+    out.dNow += d; out.rNow += r;
+    out.dBase += g.D; out.rBase += g.R;
+    out.races++;
+    out.reporting += res.reporting || 0;
+  }
+  if (out.races) out.reporting /= out.races;
+  return out;
+}
+
+function renderTurnout() {
+  const zone = $('#turnoutzone');
+  if (!zone) return;
+  const years = (DATA.turnoutBase && DATA.turnoutBase.years) || { senate: 2020, house: 2022, gov: 2022 };
+  const offices = [
+    ['senate', 'Senate', years.senate],
+    ['house', 'House', years.house],
+    ['gov', 'Governor', years.gov],
+  ];
+  const rows = offices.map(([k, label, yr]) => ({ k, label, yr, ...turnoutFor(k) }));
+  const live = rows.filter(r => r.races);
+
+  $('#turnoutcount').textContent = live.length
+    ? `· ${live.reduce((s, r) => s + r.races, 0)} races`
+    : '· nothing counted yet';
+
+  if (!live.length) {
+    zone.replaceChildren(el('div', { class: 'warnbox', html:
+      'No race has reported a vote yet. This fills in as results arrive, comparing each office against the '
+      + 'same seats last time — House and Governor against <b>2022</b>, the Senate against <b>2020</b>, because '
+      + 'the seats up this year last ran then. Demo data fills it in without any requests.' }));
+    return;
+  }
+
+  const n = (v) => v.toLocaleString();
+  const pctOf = (now, base) => base > 0 ? (now / base) * 100 : null;
+  const pctCell = (now, base) => {
+    const p = pctOf(now, base);
+    if (p === null) return el('td', { class: 'muted', text: '—' });
+    // Deliberately not coloured by party: this is a share of a past total, and
+    // a red or blue 83% would read as someone winning something.
+    return el('td', { class: 'cell-margin', text: `${p.toFixed(0)}%` });
+  };
+
+  const table = el('table');
+  table.append(el('thead', {}, el('tr', {}, [
+    el('th', { class: 'l', text: 'Office' }),
+    el('th', { text: 'Races in' }),
+    el('th', { text: 'Counted' }),
+    el('th', { text: 'Democratic' }),
+    el('th', { text: 'vs base', title: 'Votes so far as a share of what these same races produced in the baseline year' }),
+    el('th', { text: 'Republican' }),
+    el('th', { text: 'vs base' }),
+    el('th', { text: 'Both' }),
+    el('th', { text: 'vs base' }),
+  ])));
+  const body = el('tbody');
+  for (const r of rows) {
+    if (!r.races) {
+      body.append(el('tr', {}, [
+        el('td', { class: 'l' }, [el('span', { text: r.label }),
+          el('span', { class: 'pill', text: `vs ${r.yr}`, style: 'margin-left:6px' })]),
+        el('td', { class: 'muted', text: `0 / ${r.comparable}` }),
+        ...Array.from({ length: 7 }, () => el('td', { class: 'muted', text: '—' })),
+      ]));
+      continue;
+    }
+    body.append(el('tr', {}, [
+      el('td', { class: 'l' }, [el('span', { text: r.label }),
+        el('span', { class: 'pill', text: `vs ${r.yr}`, style: 'margin-left:6px',
+          title: r.k === 'senate'
+            ? 'The 2026 Senate seats are Class 2 and last ran in 2020. The 2022 map was Class 3 — different seats — so it is not a comparison that can be made.'
+            : 'The previous midterm, same seats.' })]),
+      el('td', { text: `${r.races} / ${r.comparable}`,
+        title: `${r.comparable} races have a usable baseline; ${r.races} of them have counted a vote` }),
+      el('td', { text: `${r.reporting.toFixed(0)}%`,
+        title: 'Mean percent reporting across the races being compared' }),
+      el('td', { text: n(r.dNow) }),
+      pctCell(r.dNow, r.dBase),
+      el('td', { text: n(r.rNow) }),
+      pctCell(r.rNow, r.rBase),
+      el('td', { text: n(r.dNow + r.rNow) }),
+      pctCell(r.dNow + r.rNow, r.dBase + r.rBase),
+    ]));
+  }
+  table.append(body);
+
+  const skipped = rows.reduce((s, r) => s + r.skipped, 0);
+  const dropped = { senate: 35 - rows[0].comparable, house: 435 - rows[1].comparable, gov: 36 - rows[2].comparable };
+  zone.replaceChildren(
+    el('div', { class: 'scroll' }, table),
+    el('div', { class: 'legend', style: 'margin-top:10px' }, [
+      el('span', { class: 'muted',
+        title: 'A race at 40% counted has contributed about 40% of the votes it eventually will. Nothing here is scaled up to guess the final figure.',
+        html: 'percentages are of the <b>full</b> baseline, so they climb as counting proceeds' }),
+      el('span', { class: 'muted',
+        title: 'Races whose baseline had no candidate on one side — Arkansas ran no Democrat for Senate in 2020, Wyoming carries no party data in the source file, Florida and Ohio had no 2020 Senate race at all, and 36 House districts went uncontested in 2022.',
+        text: `no usable baseline: ${dropped.senate} Senate · ${dropped.house} House · ${dropped.gov} Governor` }),
+      skipped ? el('span', { class: 'muted',
+        title: 'Reporting races left out because one of the two parties is not on the 2026 ballot, so there is nothing to compare against the baseline on that side.',
+        text: `${skipped} reporting race${skipped === 1 ? '' : 's'} not R-vs-D this year` }) : null,
+      el('span', { class: 'muted',
+        title: 'Independents and third parties are counted on neither side. In a race where an independent takes a large share, both figures understate the votes actually cast.',
+        text: 'R and D votes only' }),
+    ]),
+  );
+}
+
+/* ============================================================
    Rendering — seat flips
    ============================================================ */
 function renderFlips(sen) {
@@ -4027,6 +4193,7 @@ function renderAll() {
   if (tab === 'summary') {
     renderTiles(sen, stats);
     renderFlips(sen);
+    renderTurnout();
     renderErrorChart(all, stats);
     renderCoverage(sen, house, gov);
     renderHistory();

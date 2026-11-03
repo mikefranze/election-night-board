@@ -324,6 +324,45 @@ Two things to know about it:
 The **Min. counted** filter defaults to 50%. Lightly-counted counties produce
 wild swings, so dropping the threshold adds noise rather than information.
 
+## Turnout so far
+
+A Summary panel: votes cast for Republicans and for Democrats, against what the
+**same races** produced last time, for Senate, House and Governor.
+
+Three things keep it honest, and each one is a way of refusing a comparison
+that would look fine and mean nothing.
+
+**The baseline year differs by office.** House and Governor compare to **2022**,
+the previous midterm over the same seats. The Senate compares to **2020**. The
+seats up in 2026 are Class 2 and last ran in 2020; the 2022 Senate map was
+Class 3, a different set of seats that merely overlaps these states 19 times.
+Comparing them would set Texas and Florida against California and New York and
+call the difference turnout. The cost is that the Senate row is measured against
+a presidential year, so it sits far below 100% all night — every row is labelled
+with its year for that reason.
+
+**Only reporting races count, each with its own baseline.** A running total
+against the full national baseline would measure how many states had finished
+counting, not how many people voted.
+
+**Both parties must be on the ballot at both ends.** Idaho runs no Democrat for
+Senate in 2026 but did in 2020; counting it would book zero Democratic votes
+against a real baseline. Races with a one-sided baseline are dropped entirely —
+four Senate seats (Arkansas ran no Democrat in 2020, Wyoming carries no party
+data in the MEDSL file, and Florida and Ohio had no 2020 Senate race at all,
+their 2026 contests being specials) and 36 House districts uncontested in 2022.
+
+What it cannot do is separate low turnout from unfinished counting. A race at
+40% counted has contributed roughly 40% of the votes it eventually will, so
+every percentage climbs through the night; nothing is scaled up to guess a final
+figure. The counted column sits beside it to be read together.
+
+Independents are counted on neither side, so in a race where one takes a large
+share both figures understate the votes actually cast.
+
+Baselines: Senate 2020 and House 2022 from MEDSL, Governor 2022 from
+`data/governor_votes_2022.csv`, which is hand-entered — see its header.
+
 ## Demo data
 
 The **Demo data** button in the header fills every race with synthetic results
