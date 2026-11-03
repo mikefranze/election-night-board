@@ -96,12 +96,18 @@ This writes one NDJSON line per sweep to `data/snapshots/YYYY-MM-DD.ndjson` and
 keeps going whether or not a browser tab survives — about **3.2 KB per sweep**,
 so roughly 4.6 MB for a 12-hour night at 30s.
 
-The page separately keeps its own history in IndexedDB, one snapshot per
+The page can separately keep its own history in IndexedDB, one snapshot per
 successful refresh, which is what margin sparklines and the change feed read.
 It falls back to memory where storage is blocked (some origins refuse it
 outright) and says which mode it is in. Both write the **same NDJSON shape**, so
-a replay can read either. Export or clear it under *Recorded history* in the
-feed-coverage panel.
+a replay can read either.
+
+This is **off by default** — writing ~500 races to a visitor's browser storage
+every thirty seconds is not something to start doing unasked, and
+`scripts/record.mjs` is the durable archive either way. Turn it on with
+*Record history in this browser* under *Recorded history* in the feed-coverage
+panel; the choice is remembered, and turning it off keeps whatever is already
+recorded. Export and clear live beside the switch.
 
 Only successful sweeps are recorded, so a failed fetch cannot write a row of
 blanks that would later read as every race collapsing to zero.

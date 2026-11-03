@@ -229,7 +229,9 @@ Built in two halves, because a static page has no backend:
   is far heavier — use a 5-10 minute interval with it.
 - **In-page history** — one compact snapshot per successful sweep in IndexedDB,
   falling back to memory where storage is blocked. Feeds sparklines (3.1) and the
-  change feed (1.3). Exportable from the diagnostics panel.
+  change feed (1.3). Exportable from the diagnostics panel. **Off by default**
+  since it writes to a visitor's browser on every refresh; the switch is beside
+  the export button, and the choice is remembered.
 
 Both write the **same NDJSON shape**, so a replay can read either.
 

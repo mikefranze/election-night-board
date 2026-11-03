@@ -206,6 +206,7 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   padding: 9px; box-shadow: 0 14px 40px rgba(0,0,0,.5);
 }
 .ddrow { display: flex; gap: 6px; margin-bottom: 8px; }
+.switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
 .mcset { display: block; margin-bottom: 14px; cursor: pointer; }
 .mcset:last-child { margin-bottom: 2px; }
 .mcsethead { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
@@ -325,12 +326,18 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   <details>
     <summary>Recorded history</summary>
     <p class="sub" style="margin:8px 0 6px">
-      Every successful refresh is recorded so the board can show how a race moved, not only where it
-      stands. This is the browser's own copy and is lost if site data is cleared — for a durable archive
-      run <code>node scripts/record.mjs</code> alongside, which writes NDJSON to <code>data/snapshots/</code>
+      With this on, every successful refresh is recorded so the board can show how a race moved, not only
+      where it stands. It is <b>off by default</b>: it writes a snapshot of every race to this browser's
+      storage on each refresh, which is not something to start doing without being asked. This is the
+      browser's own copy and is lost if site data is cleared — for a durable archive run
+      <code>node scripts/record.mjs</code> alongside, which writes NDJSON to <code>data/snapshots/</code>
       and keeps going if this tab does not.
     </p>
-    <div id="historyzone" class="legend"></div>
+    <label class="switch" title="Record one snapshot of every race per successful refresh, in this browser. Remembered across reloads. Turning it off keeps whatever is already recorded.">
+      <input type="checkbox" id="histon">
+      <span>Record history in this browser</span>
+    </label>
+    <div id="historyzone" class="legend" style="margin-top:8px"></div>
     <div style="margin-top:8px">
       <button id="histexport">Export history</button>
       <button id="histclear">Clear history</button>
@@ -594,6 +601,7 @@ const DATA = {"meta":{"generated":"2026-11-03T03:31:18.223Z","electionDate":"202
 /* ---------------- config ---------------- */
 const API = 'https://civicapi.org/api/v2';
 const OVERRIDE_KEY = 'electionboard.overrides.v1';
+const HIST_KEY = 'electionboard.recordhistory.v1';
 const MAJOR = { Democratic: 'D', Republican: 'R' };
 
 /* ---------------- tiny helpers ---------------- */
@@ -1549,6 +1557,15 @@ const HISTORY = {
   DB: 'electionboard', STORE: 'snapshots', VERSION: 1,
   db: null, mem: [], persistent: false, MAX_MEM: 3000,
 
+  /* Off unless asked for. Recording writes a row of ~500 races to IndexedDB
+     every sweep, which at a 30-second refresh is 120 rows an hour of data
+     nobody asked this page to keep, on a machine it cannot clean up after.
+     scripts/record.mjs is the durable archive and it runs whether this tab is
+     open or not, so the in-page copy earns its keep only when someone wants
+     sparklines in this browser. The switch lives beside the export and clear
+     buttons under Feed coverage, and the choice is remembered. */
+  enabled: false,
+
   async open() {
     if (this.db || typeof indexedDB === 'undefined') return;
     try {
@@ -1570,6 +1587,9 @@ const HISTORY = {
 
   /** One row per sweep: { t, races: { key: [margin, reporting, called] } }. */
   async append(live) {
+    // Guarded here rather than at the call site so nothing can write a row by
+    // taking another route in later.
+    if (!this.enabled) return;
     const races = {};
     for (const [key, r] of live) {
       if (!Number.isFinite(r.margin) && !(r.reporting > 0)) continue;   // nothing to record yet
@@ -3653,9 +3673,16 @@ function renderCoverage(sen, house, gov) {
 async function renderHistory() {
   const zone = $('#historyzone');
   if (!zone) return;
+  const box = $('#histon');
+  if (box) box.checked = HISTORY.enabled;
   const rows = await HISTORY.all();
   const span = rows.length > 1 ? Math.round((rows[rows.length - 1].t - rows[0].t) / 60000) : 0;
   zone.replaceChildren(
+    // State first, because "0 snapshots" on its own looks like a fault rather
+    // than a setting, and off is now the shipped default.
+    HISTORY.enabled
+      ? el('span', { html: '<b style="color:var(--dem)">recording</b>' })
+      : el('span', { class: 'muted', html: '<b>not recording</b> — tick the box to start' }),
     el('span', { html: `<b>${rows.length.toLocaleString()}</b> snapshot${rows.length === 1 ? '' : 's'}` }),
     el('span', { html: span ? `spanning <b>${span < 90 ? span + 'm' : (span / 60).toFixed(1) + 'h'}</b>` : 'no span yet' }),
     el('span', {
@@ -4046,6 +4073,10 @@ function measureStick() {
 
 function init() {
   measureStick();
+  // Read the preference before the first sweep can land, or a tab opened with
+  // recording on would drop its opening snapshot.
+  try { HISTORY.enabled = localStorage.getItem(HIST_KEY) === '1'; } catch { /* private mode */ }
+  $('#histon').checked = HISTORY.enabled;
   HISTORY.open().then(renderHistory);
   addEventListener('resize', measureStick);
   $('#eday').textContent = `· ${new Date(DATA.meta.electionDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`;
@@ -4080,6 +4111,11 @@ function init() {
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
   $('#histclear').addEventListener('click', async () => { await HISTORY.clear(); renderHistory(); });
+  $('#histon').addEventListener('change', (e) => {
+    HISTORY.enabled = e.target.checked;
+    try { localStorage.setItem(HIST_KEY, HISTORY.enabled ? '1' : '0'); } catch { /* private mode */ }
+    renderHistory();
+  });
   $('#mcsys').addEventListener('input', (e) => {
     MC.systematic = Number(e.target.value) / 100;
     $('#mcsysval').textContent = `${e.target.value}%`;
