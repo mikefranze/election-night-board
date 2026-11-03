@@ -3770,7 +3770,9 @@ function renderTabBadges(sen, house, gov) {
 function renderBanners() {
   const el = $('#feedtestbanner');
   if (!el) return;
-  const on = state.feedTest === true && !state.showTest;
+  // Not while the demo is up: it has replaced every live record, so nothing is
+  // being suppressed and its own banner already explains the screen.
+  const on = state.feedTest === true && !state.showTest && !state.demo;
   el.hidden = !on;
   if (!on) return;
   const n = testRecordCount();
