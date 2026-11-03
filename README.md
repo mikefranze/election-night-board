@@ -228,7 +228,7 @@ an arbitrary order.
 
 **Which party is the opponent** is not always the Democrat. Four races run an
 independent as the leading non-Republican, and in Montana both a Democrat and an
-independent are on the ballot with the independent polling 17.9 points ahead of
+independent are on the ballot with the independent polling 16.5 points ahead of
 her. The `opponent` column records it for the three that have a polling row;
 Idaho has none and falls back to party, which lands on independent because no
 Democrat filed. The column is consulted after any counted votes but ahead of
