@@ -372,7 +372,12 @@ Baselines: Senate 2020 and House 2022 from MEDSL, Governor 2022 from
 
 ## Demo data
 
-The **Demo data** button in the header fills every race with synthetic results
+**Removed from the header on election day**, along with the Test feed button: once real
+results were arriving, two buttons offering fake ones were clutter at best. `makeDemo()`
+is still in the page and still works — call `setDemo(true)` from the browser console — and
+a future cycle should put the button back before the feed goes live.
+
+The **Demo data** button used to fill every race with synthetic results
 and polling averages, generated in the browser, so the whole board can be
 reviewed before real votes exist. A banner stays up the entire time it is on,
 and toggling it off clears the synthetic data and restarts the live feed.

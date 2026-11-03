@@ -205,6 +205,15 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
   background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
   padding: 9px; box-shadow: 0 14px 40px rgba(0,0,0,.5);
 }
+.pollclock {
+  border: 1px solid var(--border); border-radius: 10px; padding: 5px 12px;
+  background: var(--surface-1); min-width: 148px; line-height: 1.25;
+}
+.pollclock .pcl { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
+.pollclock .pcv { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.pollclock .pcn { font-size: 11.5px; color: var(--ink-2); }
+.pollclock.imminent .pcv { color: var(--warning); }
+.pollclock.closed  .pcv { color: var(--ink-2); font-size: 17px; }
 .ddrow { display: flex; gap: 6px; margin-bottom: 8px; }
 .switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
 .mcset { display: block; margin-bottom: 14px; cursor: pointer; }
@@ -241,9 +250,12 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
         <option value="300000">5m</option>
       </select>
     </label>
+    <div id="pollclock" class="pollclock" hidden>
+      <div class="pcl" id="pollclocklabel">Next polls close</div>
+      <div class="pcv" id="pollclockval">—</div>
+      <div class="pcn" id="pollclocknote"></div>
+    </div>
     <button id="refresh">Refresh now</button>
-    <button id="testfeed" aria-pressed="false" title="Show civicAPI's pre-election rehearsal feed. These are not real results.">Test feed</button>
-    <button id="demo" aria-pressed="false" title="Fill the board with synthetic results to review the layout">Demo data</button>
     <button id="theme" title="Toggle light / dark">◐</button>
   </div>
   <div class="sub provenance">
@@ -253,18 +265,6 @@ textarea { width: 100%; min-height: 78px; font: 12px/1.4 ui-monospace, Consolas,
 </header>
 
 <div id="feedtestbanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--critical)" hidden></div>
-
-<div id="testbanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--critical)" hidden>
-  <b>Showing civicAPI's test feed.</b> Before election day the feed publishes rehearsal results —
-  races served fully counted, with declared winners, for an election that has not happened.
-  <b>Nothing below is a real vote count.</b> Click <b>Test feed</b> again to hide it.
-</div>
-
-<div id="demobanner" class="warnbox" style="margin-bottom:14px; border-left-color: var(--warning)" hidden>
-  <b>Demo data is on.</b> Every result and polling average below is synthetic — generated in the browser
-  to let you review the layout. Nothing here is a real vote count or a real poll. Click
-  <b>Demo data</b> again to return to the live feed.
-</div>
 
 <nav class="tabs" id="tabs" role="tablist">
   <button role="tab" data-tab="summary" aria-selected="true">Summary</button>
@@ -4147,8 +4147,9 @@ function setDemo(on) {
     resetTimer();
     refresh();
   }
-  $('#demo').setAttribute('aria-pressed', String(on));
-  $('#demobanner').hidden = !on;
+  // The Demo button and its banner were removed for election day. makeDemo()
+  // is kept because it is the only way to see the board full without the feed,
+  // and a future cycle will want it: call setDemo(true) from the console.
   state.counties = null;
   $('#countypanel').hidden = true;
   renderAll();
@@ -4196,8 +4197,8 @@ function renderTabBadges(sen, house, gov) {
    rehearsal mode every count below is suppressed, and with nothing on screen
    that reads as a dead board rather than a guarded one.
 
-   Distinct from #testbanner, which covers the opposite case: the user pressing
-   Test feed to look at the rehearsal data deliberately. */
+   It carries its own override, because the Test feed button that used to
+   provide one was removed for election day. */
 function renderBanners() {
   const el = $('#feedtestbanner');
   if (!el) return;
@@ -4207,12 +4208,22 @@ function renderBanners() {
   el.hidden = !on;
   if (!on) return;
   const n = testRecordCount();
+  // The override lives in the banner rather than in a toolbar button. The
+  // button was removed for election day, but the escape hatch cannot go with
+  // it: if the feed wrongly flags real results as a rehearsal, this banner is
+  // the whole board, and there has to be a way through it.
   el.innerHTML =
     `<b>civicAPI is serving its rehearsal feed right now</b> (<code>test_data: true</code>), so `
     + (n ? `<b>${n} race${n === 1 ? '' : 's'}</b> carrying votes ${n === 1 ? 'is' : 'are'}`
          : `any counts it carries are`)
     + ` suppressed below. These are not real results, however complete they look. `
-    + `Press <b>Test feed</b> to inspect them anyway.`;
+    + `<a href="#" id="showtestanyway">Show them anyway</a> if you believe the flag is wrong.`;
+  const link = el.querySelector('#showtestanyway');
+  if (link) link.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    state.showTest = true;
+    renderAll();
+  });
 }
 
 function renderAll() {
@@ -4258,6 +4269,66 @@ function updateMcBtn() {
   if (b) b.textContent = `${(MC.systematic * 100).toFixed(0)}% systematic · ${envLabel()} ▾`;
 }
 
+/* The countdown in the header.
+   ------------------------------------------------------------
+   The Summary tab already has a "next polls close" tile, but it only redraws
+   on a sweep, it only looks at Senate races, and it is not on screen when you
+   are reading the House tab. Poll closings are what actually pace the night,
+   so this sits in the header on every tab and ticks every second.
+
+   It spans every race with a published closing time - Senate and Governor
+   both, which is what DATA.pollTimes carries - rather than the Senate alone,
+   because the next thing to happen is the next thing to happen.
+
+   Seconds appear only inside the last five minutes. Before that they are
+   noise, and a number that changes every second draws the eye away from the
+   results, which is the opposite of what a header should do. */
+function tickPollClock() {
+  const box = $('#pollclock');
+  if (!box || !DATA.pollTimes) return;
+  const now = Date.now();
+  const all = Object.keys(DATA.pollTimes)
+    .map(k => ({ k, c: closeLabel(k, now) }))
+    .filter(x => x.c);
+  if (!all.length) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const open = all.filter(x => x.c.open).sort((a, b) => a.c.mins - b.c.mins);
+  if (!open.length) {
+    box.className = 'pollclock closed';
+    $('#pollclocklabel').textContent = 'Polls closed';
+    $('#pollclockval').textContent = 'everywhere';
+    $('#pollclocknote').textContent = `all ${all.length} published closing times have passed`;
+    // Set, not left: the title is the one part of this box that does not get
+    // overwritten by the branch above, so an unset one keeps the last wave's
+    // state list long after those polls shut.
+    box.title = 'Every published poll-closing time has passed.';
+    return;
+  }
+
+  const nextAt = +open[0].c.at;
+  const wave = open.filter(x => +x.c.at === nextAt);
+  const ms = nextAt - now;
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), sec = total % 60;
+  const imminent = ms <= 5 * 60000;
+  box.className = 'pollclock' + (imminent ? ' imminent' : '');
+  $('#pollclocklabel').textContent = 'Next polls close';
+  $('#pollclockval').textContent = imminent
+    ? `${m}:${String(sec).padStart(2, '0')}`
+    : h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+
+  // One state, not one race. Senate and Governor close together wherever both
+  // are on the ballot, so keying on the race would read "DE FL FL GA GA" and
+  // make seven races look like seven places.
+  const names = [...new Set(wave.map(x => x.k.split('/')[1]))].sort();
+  const at = new Date(nextAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  $('#pollclocknote').textContent = `${at} · ${names.slice(0, 5).join(' ')}`
+    + (names.length > 5 ? ` +${names.length - 5}` : '');
+  box.title = `${wave.length === 1 ? '1 race closes' : wave.length + ' races close'} at ${at} in `
+    + (names.length === 1 ? names[0] : `${names.length} states: ${names.join(', ')}`);
+}
+
 let timer = null;
 function resetTimer() {
   if (timer) clearInterval(timer);
@@ -4293,13 +4364,8 @@ function init() {
   $('#interval').addEventListener('change', resetTimer);
   $('#refresh').addEventListener('click', refresh);
   $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
-  $('#testfeed').addEventListener('click', () => {
-    state.showTest = !state.showTest;
-    $('#testfeed').setAttribute('aria-pressed', String(state.showTest));
-    $('#testbanner').hidden = !state.showTest;
-    renderAll();
-  });
-  $('#demo').addEventListener('click', () => setDemo(!state.demo));
+  tickPollClock();
+  setInterval(tickPollClock, 1000);
   $('#loadcounties').addEventListener('click', () => {
     if (state.demo) { renderScatter(); return; }   // demo already holds county data
     loadAllCounties().catch(e => { state.countiesLoading = false; $('#loadcounties').textContent = `failed: ${e.message}`; });

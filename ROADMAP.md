@@ -508,8 +508,11 @@ Carried forward from the build. These are documented rather than fixed.
   calendar still covers it before election day, while after election day an
   unknown is taken at face value rather than blanking a board of real results.
   Rehearsal sweeps are also kept out of IndexedDB, since a poisoned history row
-  would outlive the feed flipping back. The **Test feed** button still shows the
-  rehearsal data deliberately, behind a red banner.
+  would outlive the feed flipping back. The override that used to live on the
+  **Test feed** button is now a *Show them anyway* link inside the red banner:
+  the button was removed on election day, but the escape hatch could not go
+  with it, because if the feed ever flags real results as a rehearsal that
+  banner is the entire board and there has to be a way through it.
 - **civicAPI candidate metadata has errors** (South Carolina lists "Darline
   Graham"). Margins are computed from vote totals, never names, but displayed
   names may be wrong.
