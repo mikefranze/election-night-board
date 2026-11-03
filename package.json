@@ -1,0 +1,13 @@
+{
+  "name": "election-night-board",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Election night dashboard — a single self-contained index.html built from src/dashboard.template.html and build/data.json.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "fetch-index": "node scripts/fetch_index.mjs",
+    "fetch-sources": "node scripts/fetch_sources.mjs",
+    "record": "node scripts/record.mjs"
+  }
+}

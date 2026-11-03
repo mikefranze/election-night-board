@@ -116,6 +116,7 @@ blanks that would later read as every race collapsing to zero.
 
 ```bash
 node scripts/fetch_index.mjs     # re-pull the race index + report feed coverage
+npm run build                    # both steps below, and says what changed
 node scripts/build_data.mjs      # recompute baselines -> build/data.json
 node scripts/bundle.mjs          # inline into index.html
 ```

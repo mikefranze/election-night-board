@@ -543,10 +543,27 @@ if (fs.existsSync(pollPath)) {
     const tmp = R('build/.poll.tmp.csv');
     fs.mkdirSync(R('build'), { recursive: true });
     fs.writeFileSync(tmp, lines.join('\n'));
+    // Every key this board can use. A polling row for anything else is a typo
+    // that would otherwise sit in the file doing nothing, looking loaded.
+    const knownKeys = new Set(['generic/national']);
+    for (const r of senate2026) knownKeys.add(`senate/${r.state}`);
+    for (const g of gov2026) knownKeys.add(`gov/${g.state}`);
+    for (const d of Object.keys(house2024)) knownKeys.add(`house/${d}`);
+    const seenKeys = new Set();
+
     for (const row of parseDelimited(tmp, ',')) {
       const k = String(row.race_key || '').trim();
       const m = Number(row.margin);
       if (!k || !Number.isFinite(m)) continue;
+      // Pasting a fresh block over an existing one is the normal way this file
+      // gets updated, and a repeated key used to mean the last line silently
+      // won. That is the wrong default for a file edited under time pressure:
+      // say which key, and let the person decide which row they meant.
+      if (seenKeys.has(k)) throw new Error(`polling_averages: ${k} appears more than once. Delete the row you do not want - a duplicate key silently overrides rather than merging.`);
+      seenKeys.add(k);
+      if (!knownKeys.has(k)) {
+        warn.push(`polling_averages: ${k} matches no race on this board, so the row does nothing. Check the spelling (senate/GA, gov/GA, house/GA-01, generic/national).`);
+      }
       // Party of the leading non-Republican. The margin's sign cannot convey
       // this, and neither can the candidate list where a Democrat and an
       // independent are both on the ballot (Montana).

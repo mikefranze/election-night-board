@@ -17,7 +17,7 @@ section matters if these slip.
 |---|---|---|---|
 | 0.1 | **Load polling averages** into `data/polling_averages.csv` | S | **16 of 35 Senate, 18 of 36 Governor loaded** |
 | 0.2 | **Re-run `fetch_index.mjs` every few days** to catch upstream changes | S, recurring | Ongoing — House now **435/435** |
-| 0.3 | **Rebuild and re-push after any data edit** | S | Process |
+| 0.3 | **Rebuild and re-push after any data edit** | S | **Done** — `npm run build` |
 | 0.4 | **Rehearse the night once, end to end** | M | **Done 2 Nov** — found two bugs |
 | 0.5 | **Last-known-good cache + retry backoff in the page** | M | **Done** |
 | 0.6 | **Publish to GitHub Pages and verify from a phone** | S | Not started |
@@ -119,17 +119,41 @@ catch: raw polls are Standard ($100/mo) but the **computed averages are Premium*
 most likely to run out of runway. Any source can fill the CSV; the format is
 source-agnostic by design.
 
-### 0.3 The rebuild footgun
+### 0.3 The rebuild footgun — **Done**
 
-Editing `data/polling_averages.csv` does **nothing** until both steps re-run:
+Editing `data/polling_averages.csv` does **nothing** until the data is rebuilt
+and re-bundled: it is frozen into `index.html` at build time. Two steps, and
+forgetting the second leaves a page that looks updated in the repo and is not.
+
+That is now one command, which does both and stops if the first fails:
 
 ```bash
-node scripts/build_data.mjs && node scripts/bundle.mjs
+npm run build
 ```
 
-The data is frozen into `index.html` at build time. This is easy to forget at
-8pm while pasting in final numbers. Worth a one-line `make`-style script, or at
-minimum a sticky note.
+It also reports **what changed in the polling**, because "build succeeded" and
+"my edit landed" are different claims and only the second one matters at 8am:
+
+```
+loaded: 34 rows — 16 Senate, 18 Governor, 0 House
+16 name both candidates; the rest resolve the matchup by party
+~ 2 changed: senate/GA -10.2 → -9.4, senate/ME -3.2 → -3.9
+```
+
+Edit nothing and it says so loudly — `NOTHING CHANGED since the last build` —
+which is the signal that you saved the wrong file or commented the rows out.
+
+Two guards on the CSV came out of testing this, both aimed at a block pasted in
+under time pressure:
+
+- a **repeated `race_key`** stops the build and names the key. It used to mean
+  the last line silently won, which is the wrong default for a file edited in
+  a hurry.
+- a **key matching no race** warns rather than sitting in the file looking
+  loaded — `senate/XX` does nothing, and now says so.
+
+Neither `index.html` nor `build/data.json` is touched when a build fails, so a
+bad paste leaves the previous good page in place rather than a half-written one.
 
 ### 0.4 Rehearse — **Done, 2 November**
 
