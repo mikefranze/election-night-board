@@ -34,12 +34,25 @@
 # 2022 and 2024 gubernatorial elections, not from a machine-readable dataset -
 # MEDSL publishes nothing covering governors at state level across these years,
 # and civicAPI carries a prior gubernatorial general for only 10 of these 36
-# states. Every row below is therefore one person's transcription of one
-# source. The build checks the shape of it - all 36 states present, no extras,
-# both finishers R or D, percentages in range - but it cannot check the numbers
-# themselves. Worth a spot-check against your own source before anything rests
-# on it. Nothing else on the board reads this file, so an error here moves the
-# Governor scatter and nothing more.
+# states. The build checks the shape of this file - all 36 states present, no
+# extras, both finishers R or D, percentages in range - but it cannot check the
+# numbers themselves. Nothing else on the board reads the file, so an error here
+# moves the Governor scatter and nothing more.
+#
+# CROSS-CHECKED, all 36 rows, against two sources independent of the one above:
+# civicAPI's raw vote totals for the 10 states where it holds a prior general,
+# and Ballotpedia's certified results tables for the other 26. 270toWin was
+# tried first, as asked, and does not publish gubernatorial vote percentages -
+# its results and state-history pages carry winners and matchups only, which do
+# corroborate all 36 winners and opponents.
+#
+# Result: 29 of 36 two-way margins identical, the other 7 off by exactly 0.1
+# (AL, AZ, CT, OR, SC, TX, WI), mean absolute difference 0.019 points. Those
+# seven are rounding, not error - sources differ on whether write-ins are in the
+# denominator, which moves a one-decimal percentage by a tenth and the two-way
+# margin by less. Nebraska is the clearest case: 59.7/36.3 here against
+# Ballotpedia's 59.2/36.0, two readings of the same votes over different
+# totals, and both give R+24.4. The numbers below are left as transcribed.
 #
 # Names must not contain a comma: the reader splits on commas and does not
 # handle quoted fields.

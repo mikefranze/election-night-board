@@ -474,8 +474,11 @@ certified results.
   statewide governor history dataset exists for these years, so
   `data/governor_prev.csv` is a transcription of the 2022 and 2024 results
   tables rather than a parsed source. The build validates its shape, not its
-  contents. The Governor table still compares against Trump 2024; only the
-  swing chart uses this file.
+  contents. All 36 rows have since been cross-checked against two independent
+  sources — civicAPI vote totals where it holds a prior general, Ballotpedia
+  elsewhere — and 29 margins match exactly, the other 7 by 0.1 on rounding; see
+  the file header. The Governor table still compares against Trump 2024; only
+  the swing chart uses this file.
 - **NY-21** has no published 2024 presidential totals in the source table; it
   renders as unknown rather than guessed.
 - **civicAPI candidate metadata has errors** (duplicate entries, at least one
