@@ -18,7 +18,7 @@ section matters if these slip.
 | 0.1 | **Load polling averages** into `data/polling_averages.csv` | S | **16 of 35 Senate, 18 of 36 Governor loaded** |
 | 0.2 | **Re-run `fetch_index.mjs` every few days** to catch upstream changes | S, recurring | Ongoing — House now **435/435** |
 | 0.3 | **Rebuild and re-push after any data edit** | S | Process |
-| 0.4 | **Rehearse the night once, end to end** | M | Not started |
+| 0.4 | **Rehearse the night once, end to end** | M | **Done 2 Nov** — found two bugs |
 | 0.5 | **Last-known-good cache + retry backoff in the page** | M | **Done** |
 | 0.6 | **Publish to GitHub Pages and verify from a phone** | S | Not started |
 
@@ -131,12 +131,53 @@ The data is frozen into `index.html` at build time. This is easy to forget at
 8pm while pasting in final numbers. Worth a one-line `make`-style script, or at
 minimum a sticky note.
 
-### 0.4 Rehearse
+### 0.4 Rehearse — **Done, 2 November**
 
-There is currently no way to see the board under load. Demo mode exercises the
-layout but not the real feed's behaviour. Pairs naturally with the snapshot
-recorder (2.1) — record once, replay at speed. Do this with enough days left to
-fix what it finds.
+Done the way this section suggested: the snapshot recorder had caught civicAPI's
+own rehearsal feed at 06:42 UTC on 2 November, 501 races with votes and 482
+called, and that sweep was replayed back through the live board with the clock
+set to election night 8pm.
+
+The snapshot stores only margin, votes, called and reporting per race, so the
+candidates were rebuilt from the live feed's rosters, with the recorded margin
+splitting the recorded vote between whichever two `contenders()` says the race
+is between. County breakdowns for 71 races went back in the same way, through a
+stub on the per-race endpoint, which is what finally exercised the county panel
+against real county data.
+
+**What it found.**
+
+1. **The county table was never cleared when a race had no usable counties.**
+   `renderCounties` returned early having cleared only the chart, so the last
+   race examined stayed in the table under the new race's heading — selecting
+   Alaska after Michigan showed Michigan's 83 counties, Wayne County first,
+   titled Alaska. Alaska is the permanent case, having no county baselines at
+   all, but the one that would have bitten on the night is ordinary: clicking
+   from a state that has counted to one that has not. Fixed.
+2. **Nothing else.** Every other panel rendered correctly under a full board.
+
+**What it confirmed**, none of which had been seen with real data before:
+
+- the county panel against genuine county returns — Michigan 83 of 83, swing-
+  implied statewide R+0.7, turnout 85% of 2024; South Dakota 65 of 65 and
+  correctly reporting one unmatched area, which is Oglala Lakota's 2015 FIPS
+  change
+- the test_data guard mid-count: flipping the feed to rehearsal with a full
+  board on screen reverted the Senate tile from the counted D 49 – R 51 to the
+  polling projection D 54 – R 46, dropped flips from 40 to 7, emptied turnout,
+  and raised the banner naming 488 suppressed races — with Test feed bringing
+  it all back
+- suppressed Senate rows showing the matchup and an em dash, never a leader
+- turnout, Monte Carlo, seats-votes curve, all three scatters, poll-closing
+  countdown and the flip list, all populated and consistent
+- a phone at 375px: no horizontal page scroll, header correctly not sticky,
+  every table inside a scrolling wrapper, every chart fitting the viewport
+
+**What the rehearsal could not cover.** Thirteen same-party races — ten
+California top-two D-vs-D generals plus MA-01, NJ-08 and PA-03 — are absent,
+because the harness splits a recorded margin between a Republican and a
+non-Republican and there is no Republican to split against. The real feed
+carries both candidates, so this is a limit of the fixture, not of the board.
 
 ---
 
@@ -417,9 +458,13 @@ Carried forward from the build. These are documented rather than fixed.
   can report 100% with mail outstanding, which biases both the turnout scale and
   the blend weight. Cannot be verified until real votes flow — **check this
   early on the night.**
-- **County `percent_reporting` mid-count is unverified.** Confirmed populated on
-  a completed race (NC 2020, all 100 counties at 100%), but its behaviour while
-  counting is unknown.
+- **County `percent_reporting` mid-count is partly verified.** Exercised in the
+  2 November dry run (0.4) against a recorded civicAPI sweep carrying counties
+  for 71 races at reporting levels from 1% to 100%: the county panel, the
+  swing-implied statewide margin and the turnout scale all behaved, and the
+  field was populated throughout. That was replayed data rather than a live
+  mid-count, so whether it moves sensibly as votes actually arrive is still
+  taken on trust.
 - **Independent caucus is assumed.** Osborn in Nebraska counts as
   not-Republican; who he would actually caucus with is not in the data, and in a
   50–50 Senate that is the whole ballgame.

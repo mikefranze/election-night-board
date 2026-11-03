@@ -3128,7 +3128,21 @@ function renderCounties() {
 
   // top-40 counties by weight, as a swing dot plot
   const used = withVotes.slice(0, 40);
-  if (!used.length) { $('#countychart').replaceChildren(); return; }
+  if (!used.length) {
+    // The table below is the chart's fallback, so it has to go with it. This
+    // used to return having cleared only the chart, which left the LAST race
+    // examined sitting under the new one's heading: selecting Alaska after
+    // Michigan showed Michigan's 83 counties, Wayne County first, beneath a
+    // title reading Alaska. Alaska is the permanent case - it reports by
+    // district and has no county baselines at all - but the one that matters
+    // on the night is ordinary: clicking from a state that has counted to one
+    // that has not yet.
+    $('#countychart').replaceChildren();
+    const t = $('#countytable');
+    t.tHead.replaceChildren();
+    t.tBodies[0].replaceWith(el('tbody'));
+    return;
+  }
   const W = 760, pad = { l: 116, r: 52, t: 24, b: 16 };
   const H = 20 * used.length + 40;
   const max = Math.max(5, ...used.map(r => Math.abs(r.swing))) * 1.1;
