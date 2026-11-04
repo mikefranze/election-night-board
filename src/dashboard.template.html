@@ -677,6 +677,10 @@ const state = {
   // Sections whose fetch failed while others succeeded. Their rows on screen are
   // carried forward from the last good sweep, so the status line has to say so.
   staleSections: [],
+  // Bumped once per sweep. A section abandoned at the deadline can still answer
+  // minutes later, and without this it would merge its stale numbers over a
+  // fresher sweep's.
+  sweepToken: 0,
   fetching: false,
   demo: false,
   showTest: false,
@@ -759,9 +763,13 @@ const hasCount = (res) => !!res && (res.total || 0) > 0;
    and the status line sat on "fetching..." while the board showed frozen
    numbers. It looked alive. That is the worst way for it to fail.
 
-   25s per attempt. The slowest real request measured on election morning was
-   16.5s, so this is headroom over a slow feed rather than a limit on one. */
-const FETCH_TIMEOUT_MS = 25000;
+   40s per attempt. This was 25s, chosen when the slowest real request measured
+   on election morning was 16.5s. That turned out to be a limit on a slow feed
+   rather than headroom over one: sampling upstream on election night, the
+   requests that DID succeed were taking 14s to 28.4s, so the abort was firing
+   on responses that were on their way. A timeout shorter than the server's
+   honest slow path manufactures the failure it is supposed to contain. */
+const FETCH_TIMEOUT_MS = 40000;
 
 async function getJSON(url, tries = 3) {
   let last;
@@ -902,74 +910,105 @@ async function refresh() {
   state.fetching = true;
   state.staleSections = [];
   setStatus('fetching', 'fetching…');
+  // null = still in flight, Map = answered, Error = gave up. The deadline path
+  // reads this to tell a partial sweep from a dead one.
+  const sect = { Senate: null, House: null, Governor: null };
+  const token = ++state.sweepToken;
+  let landed = 0;
+
+  /* Commit each section the moment it answers rather than holding all three
+     until the slowest finishes. Upstream latency is wildly uneven when it is
+     unwell — a Senate page answering in 15s used to sit unused while the House
+     walk ground through its pages — and the Senate and Governor numbers are the
+     ones worth putting on screen early.
+     Merging straight into state.live is safe now that a sweep merges over the
+     previous map instead of replacing it wholesale. */
+  const commit = (name, p) => p.then((v) => {
+    // Only a NEWER sweep is grounds for throwing this away: it owns the board
+    // now and its numbers are fresher. A section that merely missed the
+    // deadline is still real data, so it is allowed to land late — and when it
+    // does it is no longer stale, whatever the deadline wrote off. Without this
+    // the status line went on naming a section that had since arrived.
+    if (state.sweepToken !== token) return v;
+    sect[name] = v;
+    state.staleSections = state.staleSections.filter((x) => !x.startsWith(name + ' ('));
+    let n = 0;
+    for (const [k, race] of v) {
+      state.live.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
+      n++;
+    }
+    if (n) {
+      landed += n;
+      state.lastFetch = new Date();
+      state.lastGood = new Date();
+      // state.feedTest is still the previous sweep's answer at this point. That
+      // is a 60-second-old guard rather than a missing one, and holding every
+      // number back until a fresh probe returns is the worse trade on a feed
+      // this slow — the probe is one more request through the same bad pipe.
+      renderAll();
+    }
+    return v;
+  }).catch((e) => {
+    if (state.sweepToken === token) sect[name] = e instanceof Error ? e : new Error(String(e));
+    return null;
+  });
+
   try {
+    const sweep = Promise.all([
+      commit('Senate', fetchSenate()),
+      commit('House', fetchHouse()),
+      commit('Governor', fetchGovernor()),
+    ]);
     // Belt as well as braces. The per-request timeout above should make a
     // stuck sweep impossible, but "impossible" is how the last one got here:
     // if anything leaves these promises unsettled, this releases the guard so
     // the next tick can try again, rather than the board stalling for the
-    // night. A sweep measured ~45s on election morning; this only fires on a
-    // genuine hang.
-    const sweep = Promise.all([
-      fetchSenate().catch((e) => ({ failed: e })),
-      fetchHouse().catch((e) => ({ failed: e })),
-      fetchGovernor().catch((e) => ({ failed: e })),
-    ]);
+    // night.
     let bell;
     const deadline = new Promise((_, rej) => {
-      bell = setTimeout(() => rej(new Error(`sweep gave up after ${SWEEP_DEADLINE_MS / 1000}s`)), SWEEP_DEADLINE_MS);
+      bell = setTimeout(() => rej(new Error(`gave up after ${SWEEP_DEADLINE_MS / 1000}s`)), SWEEP_DEADLINE_MS);
     });
-    // The loser of this race is abandoned, not cancelled. That is safe: its
-    // value is never assigned, so a late sweep cannot overwrite fresher data.
-    const [sen, house, gov] = await Promise.race([sweep, deadline]).finally(() => clearTimeout(bell));
-    // Ask the feed what it is before trusting a single count out of it. This
-    // gates the display and the history write below, so it has to resolve
-    // before either.
+    try {
+      await Promise.race([sweep, deadline]).finally(() => clearTimeout(bell));
+    } catch (e) {
+      // The deadline fired. Sections that already committed stand; only the ones
+      // still in flight are reported, and the sweep token above stops them
+      // writing anything if they turn up later.
+      for (const k of Object.keys(sect)) if (sect[k] === null) sect[k] = e;
+    }
+
     /* One chamber failing used to discard the other two. fetchSenate() was the
        only one of the three without a .catch, so a single 502 on a Senate page
        rejected the whole Promise.all and threw away House and Governor results
        that had already come back clean: the board dropped to "showing data from
        Xm ago" for every race on the screen while two thirds of the feed was
        answering normally. On a flapping upstream that is most of the night.
-       Sections are independent now. Whatever answered is merged over the last
-       good map, and only a total failure counts as an error. */
-    const sections = [['Senate', sen], ['House', house], ['Governor', gov]];
-    const ok = sections.filter(([, v]) => v instanceof Map);
-    if (!ok.length) throw (sen.failed || house.failed || gov.failed);
-    state.staleSections = sections
-      .filter(([, v]) => !(v instanceof Map))
-      .map(([name, v]) => {
-        const why = v.failed && v.failed.message ? String(v.failed.message).split(' for ')[0] : 'failed';
-        return `${name} (${why})`;
+       Sections are independent now, in failure and in latency, and only a total
+       failure counts as an error. */
+    const names = Object.keys(sect);
+    const ok = names.filter((k) => sect[k] instanceof Map);
+    if (!ok.length) throw (sect.Senate || sect.House || sect.Governor || new Error('no section answered'));
+    state.staleSections = names
+      .filter((k) => !(sect[k] instanceof Map))
+      .map((k) => {
+        const why = sect[k] && sect[k].message ? String(sect[k].message).split(' for ')[0] : 'failed';
+        return `${k} (${why})`;
       });
 
     // Probe whichever section answered. The test_data guard must not fall back
     // to "unknown" just because the Senate page was the one that 502'd.
-    state.feedTest = await probeTestData(ok[0][1]);
+    state.feedTest = await probeTestData(sect[ok[0]]);
 
-    // Carry the previous sweep forward, so a section that failed keeps its last
-    // known rows rather than blanking them, then overwrite with what arrived.
-    const next = new Map(state.live);
-    for (const [, v] of ok) {
-      for (const [k, race] of v) {
-        next.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
-      }
-    }
-    if (next.size) {
-      state.live = next;
-      state.lastFetch = new Date();
-      state.lastGood = new Date();
-      // Record only successful sweeps, so a failure cannot write a row of blanks
-      // that would later read as every race collapsing to zero.
-      // A rehearsal sweep must not reach IndexedDB. The display guard can be
-      // toggled off and back on; a poisoned history row cannot, and it would
+    if (landed && !state.demo && state.feedTest !== true && !state.staleSections.length) {
+      // Record complete sweeps only. A failure must not write a row of blanks
+      // that would later read as every race collapsing to zero, and a partial
+      // sweep carries forward numbers it did not actually re-read — writing
+      // those would draw a plateau that never happened, so a gap is the honest
+      // record. scripts/record.mjs is the durable archive either way.
+      // A rehearsal sweep must not reach IndexedDB at all. The display guard can
+      // be toggled off and back on; a poisoned history row cannot, and it would
       // outlive the feed flipping back to real data.
-      // A partial sweep carries forward numbers it did not actually re-read.
-      // Writing that as a history row would draw a plateau that never happened,
-      // so the archive takes complete sweeps only and shows an honest gap
-      // otherwise. scripts/record.mjs is the durable archive either way.
-      if (!state.demo && state.feedTest !== true && !state.staleSections.length) {
-        await HISTORY.append(next).catch(() => {});
-      }
+      await HISTORY.append(state.live).catch(() => {});
     }
     state.lastError = null;
   } catch (e) {
