@@ -674,6 +674,9 @@ const state = {
   lastFetch: null,
   lastGood: null,
   lastError: null,
+  // Sections whose fetch failed while others succeeded. Their rows on screen are
+  // carried forward from the last good sweep, so the status line has to say so.
+  staleSections: [],
   fetching: false,
   demo: false,
   showTest: false,
@@ -780,6 +783,17 @@ async function getJSON(url, tries = 3) {
   throw new Error(`${last && last.message} for ${url}`);
 }
 
+/* The feed sorts the current election first, so the moment a page contains a
+   record from an older cycle, everything after it is older too and paging on is
+   wasted work. That is not just a speed point. On election night the Senate
+   sweep always walked to offset=400, and the page at offset=200 is 200 Senate
+   races from earlier cycles, every one of them dropped by the year filter
+   below. When upstream started flapping, that page — a page whose every row we
+   discard — returned 502 and took the whole board's refresh down with it. A
+   request you never make is a request that cannot fail. */
+const ranPastCycle = (races, year) =>
+  races.some(r => !String(r.election_date || '').startsWith(year));
+
 /** One search sweep returns every Senate general with votes — far lighter than 35 race calls. */
 async function fetchSenate() {
   const seen = new Map();
@@ -791,7 +805,7 @@ async function fetchSenate() {
       if (r.province === 'US') { seen.set('national', r); continue; }
       seen.set(`senate/${r.province}`, r);
     }
-    if (races.length < 200) break;
+    if (races.length < 200 || ranPastCycle(races, '2026')) break;
   }
   return seen;
 }
@@ -828,7 +842,7 @@ async function fetchHouse() {
       hits++;
       if (r.district) seen.set(`house/${r.district}`, r);
     }
-    if (races.length < 200 || hits === 0) break;
+    if (races.length < 200 || hits === 0 || ranPastCycle(races, '2026')) break;
   }
   return seen;
 }
@@ -853,7 +867,10 @@ async function fetchGovernor() {
       if (!/^(Statewide|General)$/i.test(r.election_type || '')) continue;
       seen.set(`gov/${r.province}`, r);
     }
-    if (races.length < 200) break;
+    // Year, not the post-filter hit count: a 2026 governor primary is a 2026
+    // record this loop rejects, and counting rejections as "ran past the cycle"
+    // would stop the walk while Statewide races were still to come.
+    if (races.length < 200 || ranPastCycle(races, '2026')) break;
   }
   return seen;
 }
@@ -883,6 +900,7 @@ const SWEEP_DEADLINE_MS = 150000;
 async function refresh() {
   if (state.fetching) return;
   state.fetching = true;
+  state.staleSections = [];
   setStatus('fetching', 'fetching…');
   try {
     // Belt as well as braces. The per-request timeout above should make a
@@ -892,9 +910,9 @@ async function refresh() {
     // night. A sweep measured ~45s on election morning; this only fires on a
     // genuine hang.
     const sweep = Promise.all([
-      fetchSenate(),
-      fetchHouse().catch(() => new Map()),
-      fetchGovernor().catch(() => new Map()),
+      fetchSenate().catch((e) => ({ failed: e })),
+      fetchHouse().catch((e) => ({ failed: e })),
+      fetchGovernor().catch((e) => ({ failed: e })),
     ]);
     let bell;
     const deadline = new Promise((_, rej) => {
@@ -906,12 +924,35 @@ async function refresh() {
     // Ask the feed what it is before trusting a single count out of it. This
     // gates the display and the history write below, so it has to resolve
     // before either.
-    state.feedTest = await probeTestData(sen);
-    // Build into a new map and only swap it in once the sweep succeeded, so a
-    // failure leaves the last good data on screen instead of emptying the board.
-    const next = new Map();
-    for (const [k, race] of [...sen, ...house, ...gov]) {
-      next.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
+    /* One chamber failing used to discard the other two. fetchSenate() was the
+       only one of the three without a .catch, so a single 502 on a Senate page
+       rejected the whole Promise.all and threw away House and Governor results
+       that had already come back clean: the board dropped to "showing data from
+       Xm ago" for every race on the screen while two thirds of the feed was
+       answering normally. On a flapping upstream that is most of the night.
+       Sections are independent now. Whatever answered is merged over the last
+       good map, and only a total failure counts as an error. */
+    const sections = [['Senate', sen], ['House', house], ['Governor', gov]];
+    const ok = sections.filter(([, v]) => v instanceof Map);
+    if (!ok.length) throw (sen.failed || house.failed || gov.failed);
+    state.staleSections = sections
+      .filter(([, v]) => !(v instanceof Map))
+      .map(([name, v]) => {
+        const why = v.failed && v.failed.message ? String(v.failed.message).split(' for ')[0] : 'failed';
+        return `${name} (${why})`;
+      });
+
+    // Probe whichever section answered. The test_data guard must not fall back
+    // to "unknown" just because the Senate page was the one that 502'd.
+    state.feedTest = await probeTestData(ok[0][1]);
+
+    // Carry the previous sweep forward, so a section that failed keeps its last
+    // known rows rather than blanking them, then overwrite with what arrived.
+    const next = new Map(state.live);
+    for (const [, v] of ok) {
+      for (const [k, race] of v) {
+        next.set(k, { ...marginFromRace(race), raceId: race.id, source: 'civicAPI' });
+      }
     }
     if (next.size) {
       state.live = next;
@@ -922,7 +963,13 @@ async function refresh() {
       // A rehearsal sweep must not reach IndexedDB. The display guard can be
       // toggled off and back on; a poisoned history row cannot, and it would
       // outlive the feed flipping back to real data.
-      if (!state.demo && state.feedTest !== true) await HISTORY.append(next).catch(() => {});
+      // A partial sweep carries forward numbers it did not actually re-read.
+      // Writing that as a history row would draw a plateau that never happened,
+      // so the archive takes complete sweeps only and shows an honest gap
+      // otherwise. scripts/record.mjs is the durable archive either way.
+      if (!state.demo && state.feedTest !== true && !state.staleSections.length) {
+        await HISTORY.append(next).catch(() => {});
+      }
     }
     state.lastError = null;
   } catch (e) {
@@ -3972,8 +4019,14 @@ function statusText() {
   }
   if (!state.lastFetch) return setStatus('stale', 'no data yet');
   const age = Math.round((Date.now() - state.lastFetch) / 1000);
-  setStatus(age > 180 ? 'stale' : 'live',
+  // A partial sweep is not a clean one. Name the section that did not answer,
+  // because its rows are last-known values sitting next to fresh ones and
+  // nothing else on the board distinguishes them.
+  const partial = state.staleSections && state.staleSections.length
+    ? ` · NOT updated: ${state.staleSections.join(', ')}` : '';
+  setStatus(partial || age > 180 ? 'stale' : 'live',
     `updated ${state.lastFetch.toLocaleTimeString()} (${fmtAge(age)} ago) · ${state.live.size} live race records`
+    + partial
     + (state.feedTest === true ? ' · feed in TEST mode' : state.feedTest === null ? ' · test_data unknown' : ''));
 }
 const fmtAge = (s) => s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`;
